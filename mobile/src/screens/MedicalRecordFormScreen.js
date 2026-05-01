@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, Linking, StyleSheet, Text, View } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
-import api, { API_URL } from '../api/client';
+import api, { getFileBaseUrl } from '../api/client';
 import AppButton from '../components/AppButton';
 import AppInput from '../components/AppInput';
 import AppSelect from '../components/AppSelect';
@@ -12,8 +12,6 @@ import { useAuth } from '../hooks/useAuth';
 import { colors, radii, spacing, useTheme } from '../theme';
 import { getTodayDateKey, toDateKey } from '../utils/clinicSchedule';
 import { formatDateTime, toPickerItems } from '../utils/date';
-
-const fileBaseUrl = API_URL.replace(/\/api$/, '');
 
 const buildVitalsState = (clinicalVitals = {}) => ({
   bloodPressure: clinicalVitals?.bloodPressure || '',
@@ -473,7 +471,7 @@ export default function MedicalRecordFormScreen({ navigation, route }) {
               </View>
               <View style={styles.attachmentActions}>
                 <AppButton
-                  onPress={() => Linking.openURL(`${fileBaseUrl}/${attachment.url}`)}
+                  onPress={() => Linking.openURL(`${getFileBaseUrl()}/${attachment.url}`)}
                   title="Open"
                   variant="outline"
                 />

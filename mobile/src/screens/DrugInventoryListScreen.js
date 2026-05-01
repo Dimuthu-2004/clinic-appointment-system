@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Alert, Image, StyleSheet, Text, View } from 'react-native';
 import { useIsFocused } from '@react-navigation/native';
-import api, { API_URL } from '../api/client';
+import api, { getFileBaseUrl } from '../api/client';
 import AppButton from '../components/AppButton';
 import EmptyState from '../components/EmptyState';
 import EntityCard from '../components/EntityCard';
@@ -9,8 +9,6 @@ import LoadingOverlay from '../components/LoadingOverlay';
 import ScreenContainer from '../components/ScreenContainer';
 import { useAuth } from '../hooks/useAuth';
 import { colors, radii, spacing, useTheme } from '../theme';
-
-const fileBaseUrl = API_URL.replace(/\/api$/, '');
 
 const getDrugStatus = (drug) => {
   if (!drug.isActive || Number(drug.quantityInStock) <= 0) {
@@ -76,7 +74,7 @@ export default function DrugInventoryListScreen({ navigation }) {
             footer={
               drug.imageUrl ? (
                 <View style={styles.imageWrap}>
-                  <Image source={{ uri: `${fileBaseUrl}/${drug.imageUrl}` }} style={styles.previewImage} />
+                  <Image source={{ uri: `${getFileBaseUrl()}/${drug.imageUrl}` }} style={styles.previewImage} />
                 </View>
               ) : null
             }

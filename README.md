@@ -244,6 +244,7 @@ npx expo start
 
 ```env
 EXPO_PUBLIC_API_URL=http://localhost:5000/api
+EXPO_PUBLIC_API_FALLBACK_URL=https://your-deployed-backend.example.com/api
 ```
 
 ### Important Expo Go Note
@@ -252,6 +253,15 @@ If you use Expo Go on a physical phone, `localhost` will not point to your compu
 
 - your computer LAN IP, for example `http://192.168.1.20:5000/api`
 - a deployed backend URL later, for example Render or Railway
+
+For a setup that can work in both local and deployed modes, you can use:
+
+```env
+EXPO_PUBLIC_API_URL=http://192.168.1.20:5000/api
+EXPO_PUBLIC_API_FALLBACK_URL=https://your-smart-clinic-api.onrender.com/api
+```
+
+The mobile app will prefer the first reachable backend and keep file, upload, and invoice links on that same backend.
 
 ## How To Use
 

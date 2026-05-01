@@ -1,15 +1,13 @@
 import { useState } from 'react';
 import { Alert, Image, StyleSheet, Switch, Text, View } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
-import api, { API_URL } from '../api/client';
+import api, { getFileBaseUrl } from '../api/client';
 import AppButton from '../components/AppButton';
 import AppInput from '../components/AppInput';
 import DateTimeField from '../components/DateTimeField';
 import ScreenContainer from '../components/ScreenContainer';
 import { useAuth } from '../hooks/useAuth';
 import { colors, radii, spacing, useTheme } from '../theme';
-
-const fileBaseUrl = API_URL.replace(/\/api$/, '');
 
 export default function DrugFormScreen({ navigation, route }) {
   const { user } = useAuth();
@@ -199,7 +197,7 @@ export default function DrugFormScreen({ navigation, route }) {
           <Text style={[styles.photoTitle, { color: themeColors.text }]}>Drug photo</Text>
           <Text style={[styles.photoSubtitle, { color: themeColors.textMuted }]}>Optional. Save the drug first, then upload a product photo.</Text>
           {imageUrl ? (
-            <Image source={{ uri: `${fileBaseUrl}/${imageUrl}` }} style={styles.photoPreview} />
+            <Image source={{ uri: `${getFileBaseUrl()}/${imageUrl}` }} style={styles.photoPreview} />
           ) : (
             <View style={[styles.photoPlaceholder, { backgroundColor: isDark ? themeColors.surfaceMuted : '#F8FBFC' }]}>
               <Text style={[styles.photoPlaceholderText, { color: themeColors.textMuted }]}>No photo uploaded</Text>
