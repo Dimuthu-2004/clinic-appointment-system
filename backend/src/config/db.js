@@ -76,7 +76,9 @@ const connectDatabase = async () => {
   const mongoUri = process.env.MONGO_URI;
 
   try {
-    await mongoose.connect(mongoUri);
+    await mongoose.connect(mongoUri, {
+      serverSelectionTimeoutMS: 10000,
+    });
     await ensureUserCollectionState();
     console.log('MongoDB connected');
   } catch (error) {
