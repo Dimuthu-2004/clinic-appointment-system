@@ -25,7 +25,11 @@ export default function LoginScreen({ navigation }) {
       setError('');
       await signIn(form);
     } catch (submitError) {
-      setError(submitError?.response?.data?.message || 'Login failed');
+      setError(
+        submitError?.response?.data?.message ||
+          submitError?.message ||
+          'Login failed'
+      );
     } finally {
       setSubmitting(false);
     }

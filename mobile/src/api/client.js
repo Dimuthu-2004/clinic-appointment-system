@@ -1,10 +1,18 @@
 import axios from 'axios';
+import { Platform } from 'react-native';
 
 const DEFAULT_LOCAL_API_URL = 'http://localhost:5000/api';
+const DEFAULT_BROWSER_LOCAL_API_URL = 'http://127.0.0.1:5000/api';
 
 const normalizeApiUrl = (value) => String(value || '').trim().replace(/\/+$/, '');
 
+const shouldPreferBrowserLoopback =
+  Platform.OS === 'web' &&
+  typeof window !== 'undefined' &&
+  ['localhost', '127.0.0.1'].includes(String(window.location?.hostname || '').toLowerCase());
+
 const configuredApiUrls = [
+  shouldPreferBrowserLoopback ? DEFAULT_BROWSER_LOCAL_API_URL : '',
   process.env.EXPO_PUBLIC_API_URL,
   process.env.EXPO_PUBLIC_API_FALLBACK_URL,
   DEFAULT_LOCAL_API_URL,
