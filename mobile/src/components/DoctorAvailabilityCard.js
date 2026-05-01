@@ -7,6 +7,7 @@ import DateTimeField from './DateTimeField';
 import { colors, radii, shadow, spacing, useTheme } from '../theme';
 import {
   availabilityScopeOptions,
+  getClinicSessionsForDate,
   getClinicHours,
   formatAvailabilityScope,
   getTodayDateKey,
@@ -31,6 +32,23 @@ export default function DoctorAvailabilityCard({ active }) {
     () => [...items].sort((left, right) => `${left.dateKey}-${left.sessionScope}`.localeCompare(`${right.dateKey}-${right.sessionScope}`)),
     [items]
   );
+  const dateScopedAvailabilityOptions = useMemo(() => {
+    const sessionOptions = getClinicSessionsForDate(form.date).map((session) => ({
+      label: `${session.label} (${session.timeRange})`,
+      value: session.value,
+    }));
+
+    return [...sessionOptions, availabilityScopeOptions.find((item) => item.value === 'full_day')].filter(Boolean);
+  }, [form.date]);
+
+  useEffect(() => {
+    if (!dateScopedAvailabilityOptions.some((item) => item.value === form.sessionScope)) {
+      setForm((current) => ({
+        ...current,
+        sessionScope: dateScopedAvailabilityOptions[0]?.value || 'full_day',
+      }));
+    }
+  }, [dateScopedAvailabilityOptions, form.sessionScope]);
 
   const loadAvailability = async () => {
     try {
@@ -95,7 +113,7 @@ export default function DoctorAvailabilityCard({ active }) {
               value={form.date}
             />
             <AppSelect
-              items={availabilityScopeOptions}
+              items={dateScopedAvailabilityOptions}
               label="Session"
               onValueChange={(sessionScope) => setForm((current) => ({ ...current, sessionScope }))}
               value={form.sessionScope}

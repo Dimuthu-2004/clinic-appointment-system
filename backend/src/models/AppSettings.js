@@ -17,6 +17,10 @@ const sessionConfigSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
+    isOpen: {
+      type: Boolean,
+      default: true,
+    },
   },
   { _id: false }
 );

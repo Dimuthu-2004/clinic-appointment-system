@@ -63,6 +63,10 @@ const saveDoctorAvailability = asyncHandler(async (req, res) => {
     throw new ApiError(422, 'No clinic sessions are available for the selected date');
   }
 
+  if (req.body.sessionScope !== 'full_day' && !sessions.some((session) => session.value === req.body.sessionScope)) {
+    throw new ApiError(422, 'The selected clinic session is closed for that date');
+  }
+
   const availability = await DoctorAvailability.findOneAndUpdate(
     {
       doctor: doctorId,

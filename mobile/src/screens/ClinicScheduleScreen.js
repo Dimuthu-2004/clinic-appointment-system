@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Alert, StyleSheet, Text, View } from 'react-native';
+import { Alert, StyleSheet, Switch, Text, View } from 'react-native';
 import api from '../api/client';
 import AppButton from '../components/AppButton';
 import AppInput from '../components/AppInput';
@@ -11,16 +11,16 @@ import { setClinicHours } from '../utils/clinicSchedule';
 
 const createEmptySchedule = () => ({
   weekday: {
-    morning: { label: 'Morning', startTime: '', endTime: '' },
-    evening: { label: 'Evening', startTime: '', endTime: '' },
+    morning: { label: 'Morning', startTime: '', endTime: '', isOpen: true },
+    evening: { label: 'Evening', startTime: '', endTime: '', isOpen: true },
   },
   saturday: {
-    morning: { label: 'Morning', startTime: '', endTime: '' },
-    evening: { label: 'Evening', startTime: '', endTime: '' },
+    morning: { label: 'Morning', startTime: '', endTime: '', isOpen: true },
+    evening: { label: 'Evening', startTime: '', endTime: '', isOpen: true },
   },
   sunday: {
-    morning: { label: 'Morning', startTime: '', endTime: '' },
-    evening: { label: 'Evening', startTime: '', endTime: '' },
+    morning: { label: 'Morning', startTime: '', endTime: '', isOpen: true },
+    evening: { label: 'Evening', startTime: '', endTime: '', isOpen: false },
   },
 });
 
@@ -61,6 +61,7 @@ export default function ClinicScheduleScreen() {
               label: session.label,
               startTime: session.startTime,
               endTime: session.endTime,
+              isOpen: session.isOpen !== false,
             };
           });
         });
@@ -105,7 +106,7 @@ export default function ClinicScheduleScreen() {
         return;
       }
 
-      if (entry.session.startTime >= entry.session.endTime) {
+      if (entry.session.isOpen && entry.session.startTime >= entry.session.endTime) {
         Alert.alert('Invalid range', 'Each session start time must be earlier than its end time.');
         return;
       }
@@ -145,6 +146,19 @@ export default function ClinicScheduleScreen() {
             {['morning', 'evening'].map((sessionKey) => (
               <View key={`${bucket}-${sessionKey}`} style={[styles.sessionCard, { backgroundColor: themeColors.surfaceMuted }]}>
                 <Text style={[styles.sessionTitle, { color: themeColors.text }]}>{form[bucket][sessionKey].label}</Text>
+                <View style={[styles.sessionToggleRow, { borderColor: themeColors.border }]}>
+                  <View style={styles.sessionToggleCopy}>
+                    <Text style={[styles.sessionToggleTitle, { color: themeColors.text }]}>Session open</Text>
+                    <Text style={[styles.sessionToggleHint, { color: themeColors.textMuted }]}>
+                      {form[bucket][sessionKey].isOpen ? 'Appointments can be booked in this session.' : 'This session is closed.'}
+                    </Text>
+                  </View>
+                  <Switch
+                    disabled={!canEdit}
+                    onValueChange={(value) => updateField(bucket, sessionKey, 'isOpen', value)}
+                    value={form[bucket][sessionKey].isOpen}
+                  />
+                </View>
                 <AppInput
                   editable={canEdit}
                   label="Start time"
@@ -156,7 +170,7 @@ export default function ClinicScheduleScreen() {
                   editable={canEdit}
                   label="End time"
                   onChangeText={(value) => updateField(bucket, sessionKey, 'endTime', value)}
-                  placeholder="07:30"
+                  placeholder="08:00"
                   value={form[bucket][sessionKey].endTime}
                 />
               </View>
@@ -203,6 +217,29 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     padding: spacing.md,
     marginBottom: spacing.sm,
+  },
+  sessionToggleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.md,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  sessionToggleCopy: {
+    flex: 1,
+    gap: spacing.xs,
+  },
+  sessionToggleTitle: {
+    color: colors.text,
+    fontWeight: '700',
+  },
+  sessionToggleHint: {
+    color: colors.textMuted,
+    lineHeight: 20,
   },
   sessionTitle: {
     color: colors.text,

@@ -1,6 +1,6 @@
 import * as SecureStore from 'expo-secure-store';
 import { createContext, useEffect, useRef, useState } from 'react';
-import api, { extractErrorMessage, setAuthToken } from '../api/client';
+import api, { extractErrorMessage, setAuthFailureHandler, setAuthToken } from '../api/client';
 import { registerDeviceForPushNotifications, unregisterDevicePushToken } from '../utils/pushNotifications';
 
 const STORAGE_KEY = 'clinic-auth-session';
@@ -16,6 +16,15 @@ export function AuthProvider({ children }) {
   const [pendingAppointmentBooking, setPendingAppointmentBooking] = useState(null);
   const [postAuthDestination, setPostAuthDestination] = useState('');
   const registeredPushUserIdRef = useRef('');
+  const authResetInProgressRef = useRef(false);
+
+  const clearSessionState = async () => {
+    await SecureStore.deleteItemAsync(STORAGE_KEY);
+    setAuthToken(null);
+    setToken(null);
+    setUser(null);
+    registeredPushUserIdRef.current = '';
+  };
 
   useEffect(() => {
     const bootstrap = async () => {
@@ -47,16 +56,33 @@ export function AuthProvider({ children }) {
         const response = await api.get('/auth/me');
         setUser(response.data.data);
       } catch (_error) {
-        await SecureStore.deleteItemAsync(STORAGE_KEY);
-        setAuthToken(null);
-        setToken(null);
-        setUser(null);
+        await clearSessionState();
       } finally {
         setLoading(false);
       }
     };
 
     bootstrap();
+  }, []);
+
+  useEffect(() => {
+    setAuthFailureHandler(async () => {
+      if (authResetInProgressRef.current) {
+        return;
+      }
+
+      authResetInProgressRef.current = true;
+
+      try {
+        await clearSessionState();
+      } finally {
+        authResetInProgressRef.current = false;
+      }
+    });
+
+    return () => {
+      setAuthFailureHandler(null);
+    };
   }, []);
 
   useEffect(() => {
@@ -129,11 +155,7 @@ export function AuthProvider({ children }) {
 
   const signOut = async () => {
     await unregisterDevicePushToken();
-    await SecureStore.deleteItemAsync(STORAGE_KEY);
-    setAuthToken(null);
-    setToken(null);
-    setUser(null);
-    registeredPushUserIdRef.current = '';
+    await clearSessionState();
   };
 
   const refreshProfile = async () => {

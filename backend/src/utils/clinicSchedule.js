@@ -12,36 +12,42 @@ const DEFAULT_CLINIC_SCHEDULE = {
     morning: {
       label: 'Morning',
       startTime: '06:00',
-      endTime: '07:30',
+      endTime: '08:00',
+      isOpen: true,
     },
     evening: {
       label: 'Evening',
-      startTime: '19:00',
+      startTime: '18:00',
       endTime: '22:00',
+      isOpen: true,
     },
   },
   saturday: {
     morning: {
       label: 'Morning',
-      startTime: '06:30',
-      endTime: '08:30',
+      startTime: '08:00',
+      endTime: '12:00',
+      isOpen: true,
     },
     evening: {
       label: 'Evening',
       startTime: '17:00',
-      endTime: '22:00',
+      endTime: '21:00',
+      isOpen: true,
     },
   },
   sunday: {
     morning: {
       label: 'Morning',
       startTime: '08:00',
-      endTime: '10:00',
+      endTime: '12:00',
+      isOpen: true,
     },
     evening: {
       label: 'Evening',
-      startTime: '15:00',
-      endTime: '20:00',
+      startTime: '17:00',
+      endTime: '21:00',
+      isOpen: false,
     },
   },
 };
@@ -124,16 +130,45 @@ const formatTimeLabel = (time) => {
 
 const enrichSession = (session) => ({
   ...session,
-  timeRange: `${formatTimeLabel(session.startTime)} - ${formatTimeLabel(session.endTime)}`,
+  isOpen: session.isOpen !== false,
+  timeRange:
+    session.isOpen === false
+      ? 'Closed'
+      : `${formatTimeLabel(session.startTime)} - ${formatTimeLabel(session.endTime)}`,
 });
 
+const normalizeSession = (session, fallbackSession) => ({
+  label: String(session?.label || fallbackSession.label),
+  startTime: String(session?.startTime || fallbackSession.startTime),
+  endTime: String(session?.endTime || fallbackSession.endTime),
+  isOpen: session?.isOpen !== false,
+});
+
+const normalizeSchedule = (schedule) => {
+  const buckets = ['weekday', 'saturday', 'sunday'];
+  const normalizedSchedule = {};
+
+  buckets.forEach((bucket) => {
+    normalizedSchedule[bucket] = {};
+
+    CLINIC_SESSION_TYPES.forEach((sessionType) => {
+      normalizedSchedule[bucket][sessionType] = normalizeSession(
+        schedule?.[bucket]?.[sessionType],
+        DEFAULT_CLINIC_SCHEDULE[bucket][sessionType]
+      );
+    });
+  });
+
+  return normalizedSchedule;
+};
+
 const setClinicSchedule = (schedule) => {
-  runtimeClinicSchedule = cloneSchedule(schedule || DEFAULT_CLINIC_SCHEDULE);
+  runtimeClinicSchedule = normalizeSchedule(schedule || DEFAULT_CLINIC_SCHEDULE);
   scheduleLoadedFromDb = true;
   return getClinicSchedule();
 };
 
-const getClinicSchedule = () => cloneSchedule(runtimeClinicSchedule);
+const getClinicSchedule = () => cloneSchedule(normalizeSchedule(runtimeClinicSchedule));
 
 const getClinicSessionsForDate = (dateInput) => {
   const dayBucket = getDayBucket(dateInput);
@@ -143,9 +178,10 @@ const getClinicSessionsForDate = (dateInput) => {
   }
 
   return CLINIC_SESSION_TYPES.map((sessionType) => ({
-    value: sessionType,
-    ...enrichSession(runtimeClinicSchedule[dayBucket][sessionType]),
-  }));
+      value: sessionType,
+      ...enrichSession(runtimeClinicSchedule[dayBucket][sessionType]),
+    }))
+    .filter((session) => session.isOpen);
 };
 
 const isClinicSessionAvailableForDate = (dateInput, session) =>
@@ -220,11 +256,15 @@ const validateClinicSchedulePayload = (schedule) => {
     for (const sessionType of CLINIC_SESSION_TYPES) {
       const session = schedule?.[bucket]?.[sessionType];
 
-      if (!session?.label || !isTimeKey(session.startTime) || !isTimeKey(session.endTime)) {
+      if (!session?.label || typeof session?.isOpen !== 'boolean') {
         return false;
       }
 
-      if (session.startTime >= session.endTime) {
+      if (!isTimeKey(session.startTime) || !isTimeKey(session.endTime)) {
+        return false;
+      }
+
+      if (session.isOpen && session.startTime >= session.endTime) {
         return false;
       }
     }
@@ -241,9 +281,9 @@ const loadClinicScheduleFromDb = async ({ force = false } = {}) => {
   const settings = await AppSettings.findOne().select('clinicSchedule').lean();
 
   if (settings?.clinicSchedule && validateClinicSchedulePayload(settings.clinicSchedule)) {
-    runtimeClinicSchedule = cloneSchedule(settings.clinicSchedule);
+    runtimeClinicSchedule = normalizeSchedule(settings.clinicSchedule);
   } else {
-    runtimeClinicSchedule = cloneSchedule(DEFAULT_CLINIC_SCHEDULE);
+    runtimeClinicSchedule = normalizeSchedule(DEFAULT_CLINIC_SCHEDULE);
   }
 
   scheduleLoadedFromDb = true;
