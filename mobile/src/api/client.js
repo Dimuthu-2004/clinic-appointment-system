@@ -11,19 +11,20 @@ const shouldPreferBrowserLoopback =
   typeof window !== 'undefined' &&
   ['localhost', '127.0.0.1'].includes(String(window.location?.hostname || '').toLowerCase());
 
-const configuredApiUrls = [
-  shouldPreferBrowserLoopback ? DEFAULT_BROWSER_LOCAL_API_URL : '',
-  process.env.EXPO_PUBLIC_API_URL,
-  process.env.EXPO_PUBLIC_API_FALLBACK_URL,
-  DEFAULT_LOCAL_API_URL,
-]
-  .map(normalizeApiUrl)
-  .filter(Boolean)
-  .filter((value, index, list) => list.indexOf(value) === index);
+const configuredApiUrls = shouldPreferBrowserLoopback
+  ? [DEFAULT_BROWSER_LOCAL_API_URL]
+  : [
+      process.env.EXPO_PUBLIC_API_URL,
+      process.env.EXPO_PUBLIC_API_FALLBACK_URL,
+      DEFAULT_LOCAL_API_URL,
+    ]
+      .map(normalizeApiUrl)
+      .filter(Boolean)
+      .filter((value, index, list) => list.indexOf(value) === index);
 
 let activeApiUrl = configuredApiUrls[0] || DEFAULT_LOCAL_API_URL;
 let apiResolutionPromise = null;
-let apiUrlResolved = false;
+let apiUrlResolved = shouldPreferBrowserLoopback;
 let authToken = null;
 let authFailureHandler = null;
 
