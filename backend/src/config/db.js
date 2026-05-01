@@ -1,6 +1,20 @@
 const mongoose = require('mongoose');
 const User = require('../models/User');
 
+const isLocalMongoUri = (uri = '') => /mongodb:\/\/(127\.0\.0\.1|localhost)(:\d+)?\//i.test(uri);
+
+const buildMongoConnectionHelp = (uri) => {
+  if (isLocalMongoUri(uri)) {
+    return [
+      `MongoDB is not reachable at ${uri}.`,
+      'Start a local MongoDB server, or replace MONGO_URI in backend/.env with your MongoDB Atlas connection string.',
+      'If you copied backend/.env.example directly, that file uses a localhost MongoDB instance by default.',
+    ].join(' ');
+  }
+
+  return `Could not connect to MongoDB using MONGO_URI=${uri}.`;
+};
+
 const ensureUserCollectionState = async () => {
   const collection = User.collection;
 
@@ -59,9 +73,16 @@ const ensureUserCollectionState = async () => {
 
 const connectDatabase = async () => {
   mongoose.set('strictQuery', true);
-  await mongoose.connect(process.env.MONGO_URI);
-  await ensureUserCollectionState();
-  console.log('MongoDB connected');
+  const mongoUri = process.env.MONGO_URI;
+
+  try {
+    await mongoose.connect(mongoUri);
+    await ensureUserCollectionState();
+    console.log('MongoDB connected');
+  } catch (error) {
+    error.message = `${buildMongoConnectionHelp(mongoUri)} ${error.message}`;
+    throw error;
+  }
 };
 
 module.exports = connectDatabase;

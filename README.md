@@ -114,6 +114,17 @@ npm install
 npm run dev
 ```
 
+### If You See `ECONNREFUSED 127.0.0.1:27017`
+
+That means the backend is trying to use the default local MongoDB URI from `backend/.env`, but no MongoDB server is running on your machine.
+
+Fix it with one of these options:
+
+1. Start your local MongoDB service, then run `npm run dev` again.
+2. Replace `MONGO_URI` in `backend/.env` with your MongoDB Atlas connection string.
+
+If you already had a working `.env` before, avoid overwriting it with `.env.example` because the example file intentionally points to a fresh localhost database.
+
 ### Backend Environment Example
 
 ```env
