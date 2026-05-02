@@ -300,7 +300,7 @@ export default function AppointmentListScreen({ navigation }) {
           const footerHint = !isDoctor
             ? ''
             : linkedRecord
-              ? 'This appointment has already been finished.'
+              ? 'This appointment already has a medical record. Open it to review or update the notes and vitals.'
               : !startState?.canStart
                 ? startState?.reason || ''
                 : !paymentCompleted
@@ -325,7 +325,7 @@ export default function AppointmentListScreen({ navigation }) {
                           ? openMedicalRecordForm(appointment, linkedRecord)
                           : showStartBlockedReason({ linkedRecord, paymentCompleted, appointment })
                       }
-                      title={linkedRecord ? 'View record' : 'Start appointment'}
+                      title={linkedRecord ? 'Open record' : 'Start appointment'}
                       variant={canStartAppointment ? 'primary' : 'secondary'}
                     />
                     {!canStartAppointment && footerHint ? (

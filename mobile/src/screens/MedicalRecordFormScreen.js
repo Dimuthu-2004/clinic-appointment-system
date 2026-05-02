@@ -13,8 +13,17 @@ import { colors, radii, spacing, useTheme } from '../theme';
 import { getDoctorStartState } from '../utils/appointmentRules';
 import { formatDateTime, toPickerItems } from '../utils/date';
 
+const splitBloodPressure = (bloodPressure = '') => {
+  const match = String(bloodPressure || '').trim().match(/^(\d{2,3})\/(\d{2,3})$/);
+
+  return {
+    bloodPressureSystolic: match?.[1] || '',
+    bloodPressureDiastolic: match?.[2] || '',
+  };
+};
+
 const buildVitalsState = (clinicalVitals = {}) => ({
-  bloodPressure: clinicalVitals?.bloodPressure || '',
+  ...splitBloodPressure(clinicalVitals?.bloodPressure),
   heartRate:
     clinicalVitals?.heartRate === null || clinicalVitals?.heartRate === undefined ? '' : String(clinicalVitals.heartRate),
   respiratoryRate:
@@ -43,11 +52,36 @@ const parseOptionalNumber = (value) => {
   return Number(value);
 };
 
+const buildBloodPressureValue = (vitals) => {
+  const systolic = String(vitals.bloodPressureSystolic || '').trim();
+  const diastolic = String(vitals.bloodPressureDiastolic || '').trim();
+
+  if (!systolic && !diastolic) {
+    return '';
+  }
+
+  return `${systolic}/${diastolic}`;
+};
+
 const validateClinicalVitals = (vitals) => {
   const nextErrors = {};
 
-  if (vitals.bloodPressure && !/^\d{2,3}\/\d{2,3}$/.test(vitals.bloodPressure.trim())) {
-    nextErrors.bloodPressure = 'Use a format like 120/80';
+  const systolic = String(vitals.bloodPressureSystolic || '').trim();
+  const diastolic = String(vitals.bloodPressureDiastolic || '').trim();
+
+  if ((systolic && !diastolic) || (!systolic && diastolic)) {
+    nextErrors.bloodPressure = 'Enter both systolic and diastolic values';
+  }
+
+  if (systolic && diastolic) {
+    const systolicValue = Number(systolic);
+    const diastolicValue = Number(diastolic);
+
+    if (!Number.isFinite(systolicValue) || systolicValue < 30 || systolicValue > 300) {
+      nextErrors.bloodPressure = 'Systolic pressure must be between 30 and 300';
+    } else if (!Number.isFinite(diastolicValue) || diastolicValue < 20 || diastolicValue > 200) {
+      nextErrors.bloodPressure = 'Diastolic pressure must be between 20 and 200';
+    }
   }
 
   const numericChecks = [
@@ -96,15 +130,17 @@ export default function MedicalRecordFormScreen({ navigation, route }) {
   const existingRecord = route.params?.medicalRecord || null;
   const linkedAppointment = route.params?.appointment || existingRecord?.appointment || null;
   const isDoctorStartMode = user?.role === 'doctor' && route.params?.startMode;
-  const canEdit = ['doctor', 'admin'].includes(user?.role);
+  const isDoctor = user?.role === 'doctor';
+  const isAdmin = user?.role === 'admin';
   const doctorStartState = linkedAppointment ? getDoctorStartState(linkedAppointment) : { canStart: true, reason: '' };
   const canStartToday = doctorStartState.canStart;
-  const isDoctorCompletedRecordView = user?.role === 'doctor' && existingRecord && !isDoctorStartMode;
-  const canEditCurrentForm = canEdit && !isDoctorCompletedRecordView && (!isDoctorStartMode || canStartToday);
+  const canEditCurrentForm = isDoctor && (!isDoctorStartMode || canStartToday);
+  const canDeleteRecord = Boolean(existingRecord?._id) && (isDoctor || isAdmin) && !isDoctorStartMode;
+  const canManageAttachments = isDoctor && canEditCurrentForm;
   const [patients, setPatients] = useState([]);
   const [doctors, setDoctors] = useState([]);
   const [appointments, setAppointments] = useState([]);
-  const [loading, setLoading] = useState(canEdit && !isDoctorStartMode);
+  const [loading, setLoading] = useState(canEditCurrentForm && !isDoctorStartMode);
   const [submitting, setSubmitting] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [activeSection, setActiveSection] = useState('notes');
@@ -123,8 +159,8 @@ export default function MedicalRecordFormScreen({ navigation, route }) {
   const [vitals, setVitals] = useState(buildVitalsState(existingRecord?.clinicalVitals));
 
   useEffect(() => {
-    const loadOptions = async () => {
-      if (!canEdit || isDoctorStartMode) {
+      const loadOptions = async () => {
+      if (!canEditCurrentForm || isDoctorStartMode) {
         setLoading(false);
         return;
       }
@@ -147,7 +183,7 @@ export default function MedicalRecordFormScreen({ navigation, route }) {
     };
 
     loadOptions();
-  }, [canEdit, isDoctorStartMode]);
+  }, [canEditCurrentForm, isDoctorStartMode]);
 
   useEffect(() => {
     setAttachments(existingRecord?.attachments || []);
@@ -223,7 +259,7 @@ export default function MedicalRecordFormScreen({ navigation, route }) {
         treatmentPlan: form.treatmentPlan,
         notes: form.notes,
         clinicalVitals: {
-          bloodPressure: vitals.bloodPressure,
+          bloodPressure: buildBloodPressureValue(vitals),
           heartRate: parseOptionalNumber(vitals.heartRate),
           respiratoryRate: parseOptionalNumber(vitals.respiratoryRate),
           temperatureCelsius: parseOptionalNumber(vitals.temperatureCelsius),
@@ -353,13 +389,13 @@ export default function MedicalRecordFormScreen({ navigation, route }) {
     <ScreenContainer>
       <View style={[styles.card, { backgroundColor: themeColors.surface, borderColor: themeColors.border }]}>
         <Text style={[styles.title, { color: themeColors.text }]}>
-          {isDoctorStartMode ? 'Start appointment' : existingRecord ? 'Completed appointment record' : 'Medical record'}
+          {isDoctorStartMode ? 'Start appointment' : existingRecord ? 'Medical record' : 'Medical record'}
         </Text>
         <Text style={[styles.subtitle, { color: themeColors.textMuted }]}>
           {isDoctorStartMode
             ? 'Add the medical record and optional clinical vitals. Saving this form finishes the appointment.'
-            : isDoctorCompletedRecordView
-            ? 'This appointment is finished. You can review the saved medical notes and vitals here.'
+            : isAdmin
+            ? 'Review the saved medical notes, attachments, and vitals. Admins can delete records but cannot edit them.'
             : 'Clinical findings, treatment plans, and supporting documents.'}
         </Text>
 
@@ -386,7 +422,7 @@ export default function MedicalRecordFormScreen({ navigation, route }) {
           </View>
         ) : null}
 
-        {!isDoctorStartMode && !isDoctorCompletedRecordView ? (
+        {canEditCurrentForm && !isDoctorStartMode ? (
           <>
             <AppSelect
               items={toPickerItems(patients, (patient) => `${patient.firstName} ${patient.lastName}`)}
@@ -464,17 +500,29 @@ export default function MedicalRecordFormScreen({ navigation, route }) {
               autoCorrect={false}
               editable={canEditCurrentForm}
               error={vitalErrors.bloodPressure}
-              label="Blood pressure"
-              onChangeText={(bloodPressure) => setVitals((current) => ({ ...current, bloodPressure }))}
-              placeholder="120/80"
-              value={vitals.bloodPressure}
+              keyboardType="number-pad"
+              label="Blood pressure systolic"
+              onChangeText={(bloodPressureSystolic) => setVitals((current) => ({ ...current, bloodPressureSystolic }))}
+              placeholder="120"
+              value={vitals.bloodPressureSystolic}
+            />
+            <AppInput
+              autoCapitalize="none"
+              autoCorrect={false}
+              editable={canEditCurrentForm}
+              error={vitalErrors.bloodPressure}
+              keyboardType="number-pad"
+              label="Blood pressure diastolic"
+              onChangeText={(bloodPressureDiastolic) => setVitals((current) => ({ ...current, bloodPressureDiastolic }))}
+              placeholder="80"
+              value={vitals.bloodPressureDiastolic}
             />
             <AppInput
               autoCapitalize="none"
               autoCorrect={false}
               editable={canEditCurrentForm}
               error={vitalErrors.heartRate}
-              keyboardType="numeric"
+              keyboardType="number-pad"
               label="Heart rate"
               onChangeText={(heartRate) => setVitals((current) => ({ ...current, heartRate }))}
               placeholder="72"
@@ -485,7 +533,7 @@ export default function MedicalRecordFormScreen({ navigation, route }) {
               autoCorrect={false}
               editable={canEditCurrentForm}
               error={vitalErrors.respiratoryRate}
-              keyboardType="numeric"
+              keyboardType="number-pad"
               label="Respiratory rate"
               onChangeText={(respiratoryRate) => setVitals((current) => ({ ...current, respiratoryRate }))}
               placeholder="16"
@@ -496,7 +544,7 @@ export default function MedicalRecordFormScreen({ navigation, route }) {
               autoCorrect={false}
               editable={canEditCurrentForm}
               error={vitalErrors.temperatureCelsius}
-              keyboardType="numeric"
+              keyboardType="decimal-pad"
               label="Temperature (C)"
               onChangeText={(temperatureCelsius) => setVitals((current) => ({ ...current, temperatureCelsius }))}
               placeholder="36.8"
@@ -507,7 +555,7 @@ export default function MedicalRecordFormScreen({ navigation, route }) {
               autoCorrect={false}
               editable={canEditCurrentForm}
               error={vitalErrors.oxygenSaturation}
-              keyboardType="numeric"
+              keyboardType="number-pad"
               label="Oxygen saturation (%)"
               onChangeText={(oxygenSaturation) => setVitals((current) => ({ ...current, oxygenSaturation }))}
               placeholder="98"
@@ -518,7 +566,7 @@ export default function MedicalRecordFormScreen({ navigation, route }) {
               autoCorrect={false}
               editable={canEditCurrentForm}
               error={vitalErrors.weightKg}
-              keyboardType="numeric"
+              keyboardType="decimal-pad"
               label="Weight (kg)"
               onChangeText={(weightKg) => setVitals((current) => ({ ...current, weightKg }))}
               placeholder="68"
@@ -529,7 +577,7 @@ export default function MedicalRecordFormScreen({ navigation, route }) {
               autoCorrect={false}
               editable={canEditCurrentForm}
               error={vitalErrors.heightCm}
-              keyboardType="numeric"
+              keyboardType="number-pad"
               label="Height (cm)"
               onChangeText={(heightCm) => setVitals((current) => ({ ...current, heightCm }))}
               placeholder="172"
@@ -552,7 +600,7 @@ export default function MedicalRecordFormScreen({ navigation, route }) {
                   title="Open"
                   variant="outline"
                 />
-                {canEditCurrentForm ? (
+                {canManageAttachments ? (
                   <AppButton
                     onPress={() => handleDeleteAttachment(attachment._id)}
                     title="Remove"
@@ -566,7 +614,7 @@ export default function MedicalRecordFormScreen({ navigation, route }) {
           <EmptyState message="No attachments uploaded for this medical record yet." title="No files" />
         )}
 
-        {pendingAttachments.length ? (
+        {canManageAttachments && pendingAttachments.length ? (
           <View style={styles.pendingAttachments}>
             <Text style={[styles.pendingTitle, { color: themeColors.text }]}>Selected from this device</Text>
             {pendingAttachments.map((file) => (
@@ -586,17 +634,19 @@ export default function MedicalRecordFormScreen({ navigation, route }) {
           </View>
         ) : null}
 
-        {canEditCurrentForm ? (
+        {canEditCurrentForm || canDeleteRecord ? (
           <View style={styles.actions}>
-            <AppButton
-              loading={uploading}
-              onPress={handlePickAttachment}
-              title={existingRecord ? 'Add files from device' : 'Choose files from device'}
-              variant="secondary"
-            />
+            {canManageAttachments ? (
+              <AppButton
+                loading={uploading}
+                onPress={handlePickAttachment}
+                title={existingRecord ? 'Add files from device' : 'Choose files from device'}
+                variant="secondary"
+              />
+            ) : null}
             {canEditCurrentForm ? <AppButton loading={submitting} onPress={handleSave} title={isDoctorStartMode ? 'Finish appointment' : 'Save medical record'} /> : null}
             {existingRecord && canEditCurrentForm && !isDoctorStartMode ? <AppButton onPress={handleArchive} title="Archive" variant="outline" /> : null}
-            {existingRecord && canEditCurrentForm && !isDoctorStartMode ? <AppButton onPress={handleDelete} title="Delete" variant="danger" /> : null}
+            {canDeleteRecord ? <AppButton onPress={handleDelete} title="Delete" variant="danger" /> : null}
           </View>
         ) : null}
       </View>

@@ -122,6 +122,34 @@ const ensurePatientCanCancelAppointment = (appointment) => {
   }
 };
 
+const ensurePatientCanUpdateAppointment = async (appointment) => {
+  if (!appointment?.appointmentDate) {
+    throw new ApiError(422, 'A valid appointment date is required');
+  }
+
+  if (appointment.status === 'completed') {
+    throw new ApiError(422, 'Completed appointments cannot be updated');
+  }
+
+  if (appointment.status === 'cancelled') {
+    throw new ApiError(422, 'Cancelled appointments cannot be updated');
+  }
+
+  const billing = await Billing.findOne({ appointment: appointment._id }).select('status');
+
+  if (billing?.status === 'paid') {
+    throw new ApiError(422, 'Paid appointments can no longer be updated');
+  }
+
+  const remainingMs = new Date(appointment.appointmentDate).getTime() - Date.now();
+
+  if (remainingMs < PATIENT_CANCELLATION_NOTICE_MS) {
+    throw new ApiError(422, 'Appointments can only be updated at least 6 hours before the scheduled time');
+  }
+
+  return billing;
+};
+
 const createAppointment = asyncHandler(async (req, res) => {
   const patientId = req.user.role === 'patient' ? req.user._id : req.body.patient;
 
@@ -420,9 +448,18 @@ const updateAppointment = asyncHandler(async (req, res) => {
   const previousDoctorId = String(appointment.doctor);
   const previousAppointmentTime = appointment.appointmentDate.getTime();
   const previousSession = appointment.appointmentSession;
+  const statusChangedToCancelled = req.user.role === 'patient' && req.body.status === 'cancelled';
+  const patientRequestedScheduleChange =
+    req.user.role === 'patient' &&
+    (req.body.appointmentDate !== undefined || req.body.appointmentSession !== undefined);
+  let linkedBilling = null;
 
-  if (req.user.role === 'patient' && req.body.status === 'cancelled') {
+  if (statusChangedToCancelled) {
     ensurePatientCanCancelAppointment(appointment);
+  }
+
+  if (patientRequestedScheduleChange) {
+    linkedBilling = await ensurePatientCanUpdateAppointment(appointment);
   }
 
   allowedFields.forEach((field) => {
@@ -476,6 +513,39 @@ const updateAppointment = asyncHandler(async (req, res) => {
         status: 'cancelled',
       }
     );
+  }
+
+  if (req.user.role === 'patient' && patientRequestedScheduleChange) {
+    await createNotification({
+      recipientId: appointment.patient,
+      createdBy: req.user._id,
+      type: 'appointment',
+      title: 'Appointment updated',
+      message: `Your appointment was moved to ${formatNotificationDateTime(appointment.appointmentDate)}. Token ${appointment.tokenNumber}.`,
+      entityModel: 'Appointment',
+      entityId: appointment._id,
+      metadata: {
+        appointmentSession: appointment.appointmentSession,
+        tokenNumber: appointment.tokenNumber,
+        billingStatus: linkedBilling?.status || 'pending',
+      },
+    });
+  }
+
+  if (req.user.role === 'patient' && statusChangedToCancelled) {
+    await createNotification({
+      recipientId: appointment.patient,
+      createdBy: req.user._id,
+      type: 'appointment',
+      title: 'Appointment cancelled',
+      message: `Your appointment on ${formatNotificationDateTime(appointment.appointmentDate)} was cancelled successfully.`,
+      entityModel: 'Appointment',
+      entityId: appointment._id,
+      metadata: {
+        appointmentSession: appointment.appointmentSession,
+        tokenNumber: appointment.tokenNumber,
+      },
+    });
   }
 
   const updatedAppointment = await Appointment.findById(appointment._id).populate(populateAppointment);

@@ -85,7 +85,11 @@ export default function PrescriptionFormScreen({ navigation, route }) {
   const appointmentOptions = useMemo(
     () =>
       appointments
-        .filter((appointment) => !form.patient || appointment.patient?._id === form.patient)
+        .filter(
+          (appointment) =>
+            appointment.status !== 'cancelled' &&
+            (!form.patient || appointment.patient?._id === form.patient)
+        )
         .map((appointment) => ({
           label: `${getPersonName(appointment.patient)} - ${formatDateTime(appointment.appointmentDate)}`,
           value: appointment._id,

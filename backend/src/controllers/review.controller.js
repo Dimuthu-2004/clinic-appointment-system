@@ -1,5 +1,6 @@
 const Appointment = require('../models/Appointment');
 const Review = require('../models/Review');
+const User = require('../models/User');
 const ApiError = require('../utils/ApiError');
 const asyncHandler = require('../utils/asyncHandler');
 const { ensureResourceAccess } = require('../utils/access');
@@ -66,6 +67,21 @@ const createReview = asyncHandler(async (req, res) => {
   });
 
   const populatedReview = await Review.findById(review._id).populate(populateReview);
+
+  const adminUsers = await User.find({ role: 'admin' }).select('_id');
+  await Promise.all(
+    adminUsers.map((adminUser) =>
+      createNotification({
+        recipientId: adminUser._id,
+        createdBy: req.user._id,
+        type: 'feedback',
+        title: 'New patient feedback',
+        message: `A patient submitted feedback for the appointment on ${formatNotificationDateTime(appointment.appointmentDate)}.`,
+        entityModel: 'Review',
+        entityId: review._id,
+      })
+    )
+  );
 
   res.status(201).json({
     success: true,

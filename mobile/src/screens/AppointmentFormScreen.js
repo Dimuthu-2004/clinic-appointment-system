@@ -18,7 +18,7 @@ import {
   setClinicHours,
   toDateKey,
 } from '../utils/clinicSchedule';
-import { getPatientCancellationState } from '../utils/appointmentRules';
+import { getPatientAppointmentEditState, getPatientCancellationState } from '../utils/appointmentRules';
 import { paymentMethods, specializations } from '../utils/constants';
 import { formatCurrency, toPickerItems } from '../utils/date';
 
@@ -39,6 +39,8 @@ export default function AppointmentFormScreen({ navigation, route }) {
   const existingAppointment = route.params?.appointment;
   const isGuestBooking = !user;
   const isPatientNewBooking = (isGuestBooking || user?.role === 'patient') && !existingAppointment;
+  const isPatientEditingAppointment = user?.role === 'patient' && Boolean(existingAppointment);
+  const isAdminViewer = user?.role === 'admin';
   const getInitialFormState = () => ({
     patient: existingAppointment?.patient?._id || '',
     doctor: existingAppointment?.doctor?._id || '',
@@ -70,7 +72,11 @@ export default function AppointmentFormScreen({ navigation, route }) {
   const [hasAppliedPendingBooking, setHasAppliedPendingBooking] = useState(false);
   const [skipNextPatientAvailabilityReset, setSkipNextPatientAvailabilityReset] = useState(false);
   const [appointmentFee, setAppointmentFee] = useState(APPOINTMENT_FEE);
+  const [linkedBilling, setLinkedBilling] = useState(null);
   const cancellationState = existingAppointment ? getPatientCancellationState(existingAppointment) : null;
+  const patientAppointmentEditState = isPatientEditingAppointment
+    ? getPatientAppointmentEditState(existingAppointment, linkedBilling)
+    : { canEdit: true, reason: '' };
 
   const resolveSelectedDoctor = () => {
     if (form.doctor) {
@@ -314,6 +320,26 @@ export default function AppointmentFormScreen({ navigation, route }) {
   }, [form.appointmentSession, isPatientNewBooking, sessionOptions]);
 
   useEffect(() => {
+    const loadLinkedBilling = async () => {
+      if (!existingAppointment?._id) {
+        setLinkedBilling(null);
+        return;
+      }
+
+      try {
+        const response = await api.get('/billings');
+        const nextBilling =
+          (response.data.data || []).find((billing) => billing.appointment?._id === existingAppointment._id) || null;
+        setLinkedBilling(nextBilling);
+      } catch (_error) {
+        setLinkedBilling(null);
+      }
+    };
+
+    loadLinkedBilling();
+  }, [existingAppointment?._id]);
+
+  useEffect(() => {
     if (!isPatientNewBooking) {
       return;
     }
@@ -446,6 +472,11 @@ export default function AppointmentFormScreen({ navigation, route }) {
       return;
     }
 
+    if (isPatientEditingAppointment && !patientAppointmentEditState.canEdit) {
+      Alert.alert('Update unavailable', patientAppointmentEditState.reason);
+      return;
+    }
+
     if (isGuestBooking) {
       const bookingDraft = {
         form: {
@@ -487,18 +518,21 @@ export default function AppointmentFormScreen({ navigation, route }) {
 
     try {
       setSubmitting(true);
-      const payload = {
-        doctor: selectedDoctor._id,
-        appointmentDate: scheduledAppointmentDate,
-        appointmentSession: form.appointmentSession,
-        paymentMethod: form.paymentMethod || 'paypal',
-        reason: 'Clinic appointment',
-      };
+      const payload = isPatientEditingAppointment
+        ? {
+            appointmentDate: scheduledAppointmentDate,
+            appointmentSession: form.appointmentSession,
+          }
+        : {
+            doctor: selectedDoctor._id,
+            appointmentDate: scheduledAppointmentDate,
+            appointmentSession: form.appointmentSession,
+            paymentMethod: form.paymentMethod || 'paypal',
+            reason: 'Clinic appointment',
+          };
 
-      if (!isPatientNewBooking) {
-        if (form.patient) {
-          payload.patient = form.patient;
-        }
+      if (!isPatientNewBooking && !isPatientEditingAppointment && form.patient) {
+        payload.patient = form.patient;
       }
 
       const response = existingAppointment?._id
@@ -508,7 +542,9 @@ export default function AppointmentFormScreen({ navigation, route }) {
       const savedAppointment = response?.data?.data;
       const paymentSummary = savedAppointment?.paymentSummary;
       const successMessage =
-        isPatientNewBooking && savedAppointment?.tokenNumber
+        isPatientEditingAppointment
+          ? 'Appointment updated successfully.'
+          : isPatientNewBooking && savedAppointment?.tokenNumber
           ? `Appointment booked successfully. Your token number is ${savedAppointment.tokenNumber}. Fee: ${formatCurrency(paymentSummary?.amount || selectedDoctorFee.amount, paymentSummary?.currency || selectedDoctorFee.currency)}.`
           : 'Appointment saved successfully.';
 
@@ -583,8 +619,43 @@ export default function AppointmentFormScreen({ navigation, route }) {
         <Text style={[styles.subtitle, { color: themeColors.textMuted }]}>
           {isPatientNewBooking
             ? 'Search by doctor name or specialization, then pick an available doctor and confirm your token.'
+            : isPatientEditingAppointment
+              ? 'Patients can only update the date or session before payment and at least 6 hours before the appointment.'
+              : isAdminViewer
+                ? 'Review the booked appointment details. Admins can view appointments here but cannot change them.'
             : 'Review or adjust the visit date, doctor, and clinic session.'}
         </Text>
+
+        {existingAppointment ? (
+          <View
+            style={[
+              styles.summaryCard,
+              {
+                backgroundColor: isDark ? themeColors.surfaceMuted : '#F0FDFA',
+                borderColor: isDark ? themeColors.border : '#BFECE8',
+              },
+            ]}
+          >
+            <Text style={[styles.summaryTitle, { color: themeColors.primaryDark }]}>Appointment summary</Text>
+            <Text style={[styles.summaryText, { color: themeColors.text }]}>
+              Patient: {existingAppointment.patient?.firstName} {existingAppointment.patient?.lastName}
+            </Text>
+            <Text style={[styles.summaryText, { color: themeColors.text }]}>
+              Doctor: Dr {existingAppointment.doctor?.firstName} {existingAppointment.doctor?.lastName}
+            </Text>
+            <Text style={[styles.summaryText, { color: themeColors.text }]}>
+              Token: {existingAppointment.tokenNumber || '-'}
+            </Text>
+            <Text style={[styles.summaryText, { color: themeColors.text }]}>
+              Payment: {linkedBilling?.status || 'pending'}
+            </Text>
+            {isPatientEditingAppointment && !patientAppointmentEditState.canEdit ? (
+              <Text style={[styles.paymentWarning, { color: themeColors.danger }]}>
+                {patientAppointmentEditState.reason}
+              </Text>
+            ) : null}
+          </View>
+        ) : null}
 
         {isGuestBooking ? (
           <View
@@ -605,7 +676,7 @@ export default function AppointmentFormScreen({ navigation, route }) {
           </View>
         ) : null}
 
-        {user?.role && user.role !== 'patient' ? (
+        {!isAdminViewer && user?.role && user.role !== 'patient' ? (
           <AppSelect
             items={toPickerItems(patients, (patient) => `${patient.firstName} ${patient.lastName}`)}
             label="Patient"
@@ -615,8 +686,9 @@ export default function AppointmentFormScreen({ navigation, route }) {
         ) : null}
 
         <DateTimeField
+          disabled={isAdminViewer || (isPatientEditingAppointment && !patientAppointmentEditState.canEdit)}
           label="Appointment date"
-          minimumDate={isPatientNewBooking ? new Date(`${getTodayDateKey()}T00:00:00`) : undefined}
+          minimumDate={user?.role === 'patient' || isGuestBooking ? new Date(`${getTodayDateKey()}T00:00:00`) : undefined}
           mode="date"
           onChange={(appointmentDate) => setForm((current) => ({ ...current, appointmentDate }))}
           value={form.appointmentDate}
@@ -792,6 +864,56 @@ export default function AppointmentFormScreen({ navigation, route }) {
               value={form.paymentMethod}
             />
           </>
+        ) : isPatientEditingAppointment ? (
+          <>
+            <AppSelect
+              enabled={patientAppointmentEditState.canEdit}
+              items={sessionPickerItems}
+              label="Clinic session"
+              onValueChange={(appointmentSession) => setForm((current) => ({ ...current, appointmentSession }))}
+              value={form.appointmentSession}
+            />
+            {form.doctor && form.appointmentDate && sessionPickerItems.length === 0 ? (
+              <Text style={[styles.helperText, { color: themeColors.danger }]}>
+                No clinic sessions are currently available for that doctor on the selected date.
+              </Text>
+            ) : null}
+            <View
+              style={[
+                styles.readonlyCard,
+                { backgroundColor: isDark ? themeColors.surfaceMuted : '#F8FBFC', borderColor: themeColors.border },
+              ]}
+            >
+              <Text style={[styles.readonlyTitle, { color: themeColors.text }]}>Doctor</Text>
+              <Text style={[styles.readonlyValue, { color: themeColors.text }]}>
+                Dr {existingAppointment.doctor?.firstName} {existingAppointment.doctor?.lastName}
+              </Text>
+              <Text style={[styles.readonlyMeta, { color: themeColors.textMuted }]}>
+                {existingAppointment.doctor?.specialization || 'Doctor'}
+              </Text>
+              <Text style={[styles.readonlyMeta, { color: themeColors.textMuted }]}>
+                Payment status: {linkedBilling?.status || 'pending'}
+              </Text>
+            </View>
+          </>
+        ) : isAdminViewer ? (
+          <View
+            style={[
+              styles.readonlyCard,
+              { backgroundColor: isDark ? themeColors.surfaceMuted : '#F8FBFC', borderColor: themeColors.border },
+            ]}
+          >
+            <Text style={[styles.readonlyTitle, { color: themeColors.text }]}>Booked appointment</Text>
+            <Text style={[styles.readonlyValue, { color: themeColors.text }]}>
+              Dr {existingAppointment?.doctor?.firstName} {existingAppointment?.doctor?.lastName}
+            </Text>
+            <Text style={[styles.readonlyMeta, { color: themeColors.textMuted }]}>
+              Session: {existingAppointment?.appointmentSession || 'Not set'}
+            </Text>
+            <Text style={[styles.readonlyMeta, { color: themeColors.textMuted }]}>
+              Status: {existingAppointment?.status || 'scheduled'}
+            </Text>
+          </View>
         ) : (
           <>
             <AppInput
@@ -834,12 +956,22 @@ export default function AppointmentFormScreen({ navigation, route }) {
         )}
 
         <View style={styles.actions}>
-          <AppButton
-            disabled={submitting}
-            loading={submitting}
-            onPress={handleSubmit}
-            title={isGuestBooking ? 'Continue to confirm' : isPatientNewBooking ? 'Confirm booking' : 'Save appointment'}
-          />
+          {!isAdminViewer ? (
+            <AppButton
+              disabled={submitting || (isPatientEditingAppointment && !patientAppointmentEditState.canEdit)}
+              loading={submitting}
+              onPress={handleSubmit}
+              title={
+                isGuestBooking
+                  ? 'Continue to confirm'
+                  : isPatientNewBooking
+                    ? 'Confirm booking'
+                    : isPatientEditingAppointment
+                      ? 'Update appointment'
+                      : 'Save appointment'
+              }
+            />
+          ) : null}
           {user?.role === 'patient' && existingAppointment ? (
             <AppButton
               disabled={!cancellationState?.canCancel}
@@ -848,7 +980,9 @@ export default function AppointmentFormScreen({ navigation, route }) {
               variant={cancellationState?.canCancel ? 'danger' : 'secondary'}
             />
           ) : null}
-          {existingAppointment && user?.role !== 'patient' ? <AppButton onPress={handleDelete} title="Delete" variant="danger" /> : null}
+          {existingAppointment && user?.role && !['patient', 'admin'].includes(user.role) ? (
+            <AppButton onPress={handleDelete} title="Delete" variant="danger" />
+          ) : null}
           {user?.role === 'patient' && existingAppointment && !cancellationState?.canCancel ? (
             <Text style={[styles.helperText, { color: themeColors.textMuted }]}>
               {cancellationState?.reason}
@@ -878,6 +1012,23 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     marginBottom: spacing.lg,
     lineHeight: 22,
+  },
+  summaryCard: {
+    backgroundColor: '#F0FDFA',
+    borderWidth: 1,
+    borderColor: '#BFECE8',
+    borderRadius: radii.md,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  summaryTitle: {
+    color: colors.primaryDark,
+    fontWeight: '800',
+    marginBottom: spacing.xs,
+  },
+  summaryText: {
+    color: colors.text,
+    lineHeight: 20,
   },
   guestNotice: {
     backgroundColor: '#F0FDFA',
@@ -1046,6 +1197,29 @@ const styles = StyleSheet.create({
     fontSize: 42,
     lineHeight: 48,
     marginTop: 2,
+  },
+  readonlyCard: {
+    backgroundColor: '#F8FBFC',
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.md,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  readonlyTitle: {
+    color: colors.text,
+    fontWeight: '800',
+    marginBottom: spacing.xs,
+  },
+  readonlyValue: {
+    color: colors.text,
+    fontWeight: '700',
+    lineHeight: 21,
+  },
+  readonlyMeta: {
+    color: colors.textMuted,
+    marginTop: spacing.xs,
+    lineHeight: 20,
   },
   actions: {
     gap: spacing.md,

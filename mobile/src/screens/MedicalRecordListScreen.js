@@ -65,7 +65,7 @@ export default function MedicalRecordListScreen({ navigation }) {
               ? 'Search patients you have seen before and open their previous notes, diagnoses, and clinical vitals.'
               : isPatient
                 ? 'View your diagnosis summaries, treatment plans, clinical vitals, and uploaded attachments.'
-                : 'View and manage clinical notes, treatment plans, and uploaded record attachments.'}
+                : 'Review saved medical records. Admins can view record details and delete records when necessary.'}
           </Text>
         </View>
       </View>

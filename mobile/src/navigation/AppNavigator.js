@@ -47,6 +47,7 @@ const BillingStack = createNativeStackNavigator();
 const DrugStack = createNativeStackNavigator();
 const PrescriptionStack = createNativeStackNavigator();
 const UsersStack = createNativeStackNavigator();
+const ReviewStack = createNativeStackNavigator();
 
 const getSharedScreenOptions = (colors) => ({
   headerStyle: { backgroundColor: colors.primaryDark },
@@ -173,6 +174,17 @@ function UsersNavigator() {
   );
 }
 
+function ReviewNavigator() {
+  const { colors } = useTheme();
+
+  return (
+    <ReviewStack.Navigator screenOptions={getSharedScreenOptions(colors)}>
+      <ReviewStack.Screen name="ReviewListTab" component={ReviewListScreen} options={{ title: 'Feedback' }} />
+      <ReviewStack.Screen name="ReviewForm" component={ReviewFormScreen} options={{ title: 'Feedback Details' }} />
+    </ReviewStack.Navigator>
+  );
+}
+
 function MainTabs() {
   const { user } = useAuth();
   const { colors } = useTheme();
@@ -212,6 +224,7 @@ function MainTabs() {
             BillingTab: 'wallet',
             DrugTab: 'medkit',
             PrescriptionTab: 'document-text',
+            ReviewTab: 'chatbubbles',
             UsersTab: 'people',
             ProfileTab: 'person',
           };
@@ -232,6 +245,10 @@ function MainTabs() {
 
       {['patient', 'doctor'].includes(role) ? (
         <Tab.Screen name="PrescriptionTab" component={PrescriptionNavigator} options={{ title: 'Prescriptions' }} />
+      ) : null}
+
+      {['patient', 'doctor', 'admin'].includes(role) ? (
+        <Tab.Screen name="ReviewTab" component={ReviewNavigator} options={{ title: 'Feedback' }} />
       ) : null}
 
       {['patient', 'doctor', 'admin'].includes(role) ? (

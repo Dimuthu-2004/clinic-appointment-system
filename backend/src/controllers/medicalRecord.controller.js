@@ -71,8 +71,8 @@ const ensureMedicalRecordActors = async ({ patientId, doctorId, appointmentId })
 };
 
 const createMedicalRecord = asyncHandler(async (req, res) => {
-  if (req.user.role === 'patient') {
-    throw new ApiError(403, 'Patients cannot create medical records');
+  if (req.user.role !== 'doctor') {
+    throw new ApiError(403, 'Only doctors can create medical records');
   }
 
   const payload = {
@@ -161,8 +161,8 @@ const updateMedicalRecord = asyncHandler(async (req, res) => {
     throw new ApiError(404, 'Medical record not found');
   }
 
-  if (req.user.role === 'patient' || !ensureResourceAccess(req.user, medicalRecord, ['doctor'])) {
-    throw new ApiError(403, 'You do not have access to update this medical record');
+  if (req.user.role !== 'doctor' || !ensureResourceAccess(req.user, medicalRecord, ['doctor'])) {
+    throw new ApiError(403, 'Only the assigned doctor can update this medical record');
   }
 
   const allowedFields = ['patient', 'doctor', 'appointment', 'diagnosis', 'symptoms', 'treatmentPlan', 'notes', 'isArchived'];
@@ -182,7 +182,6 @@ const updateMedicalRecord = asyncHandler(async (req, res) => {
     doctorId: medicalRecord.doctor,
     appointmentId: medicalRecord.appointment,
   });
-  await ensureDoctorCanStartAppointment({ reqUser: req.user, appointment: actorContext.appointment });
 
   await medicalRecord.save();
 
@@ -207,8 +206,8 @@ const archiveMedicalRecord = asyncHandler(async (req, res) => {
     throw new ApiError(404, 'Medical record not found');
   }
 
-  if (req.user.role === 'patient' || !ensureResourceAccess(req.user, medicalRecord, ['doctor'])) {
-    throw new ApiError(403, 'You do not have access to archive this medical record');
+  if (req.user.role !== 'doctor' || !ensureResourceAccess(req.user, medicalRecord, ['doctor'])) {
+    throw new ApiError(403, 'Only the assigned doctor can archive this medical record');
   }
 
   medicalRecord.isArchived = true;
@@ -254,8 +253,8 @@ const uploadMedicalRecordAttachments = asyncHandler(async (req, res) => {
     throw new ApiError(404, 'Medical record not found');
   }
 
-  if (req.user.role === 'patient' || !ensureResourceAccess(req.user, medicalRecord, ['doctor'])) {
-    throw new ApiError(403, 'You do not have access to upload attachments to this medical record');
+  if (req.user.role !== 'doctor' || !ensureResourceAccess(req.user, medicalRecord, ['doctor'])) {
+    throw new ApiError(403, 'Only the assigned doctor can upload attachments to this medical record');
   }
 
   if (!req.files || req.files.length === 0) {
@@ -289,8 +288,8 @@ const deleteMedicalRecordAttachment = asyncHandler(async (req, res) => {
     throw new ApiError(404, 'Medical record not found');
   }
 
-  if (req.user.role === 'patient' || !ensureResourceAccess(req.user, medicalRecord, ['doctor'])) {
-    throw new ApiError(403, 'You do not have access to delete attachments from this medical record');
+  if (req.user.role !== 'doctor' || !ensureResourceAccess(req.user, medicalRecord, ['doctor'])) {
+    throw new ApiError(403, 'Only the assigned doctor can delete attachments from this medical record');
   }
 
   const attachment = medicalRecord.attachments.id(req.params.attachmentId);

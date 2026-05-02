@@ -20,7 +20,6 @@ export default function UserFormScreen({ navigation, route }) {
   const { colors: themeColors } = useTheme();
   const userRecord = route.params?.userRecord || null;
   const isEditing = Boolean(userRecord?._id);
-  const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState({
     firstName: userRecord?.firstName || '',
     lastName: userRecord?.lastName || '',
@@ -109,38 +108,6 @@ export default function UserFormScreen({ navigation, route }) {
     return payload;
   };
 
-  const handleSave = async () => {
-    if (!isEditing) {
-      Alert.alert('Registration only', 'New accounts are created from the registration screen.');
-      return;
-    }
-
-    const validationError = validateForm();
-
-    if (validationError) {
-      Alert.alert('Validation error', validationError);
-      return;
-    }
-
-    try {
-      setSubmitting(true);
-      const payload = buildPayload();
-
-      if (isEditing) {
-        await api.put(`/users/${userRecord._id}`, payload);
-      } else {
-        await api.post('/users', payload);
-      }
-
-      Alert.alert('Saved', 'Changes saved successfully.');
-      navigation.goBack();
-    } catch (error) {
-      Alert.alert('Save failed', error?.response?.data?.message || 'Unable to save user.');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
   const handleDelete = async () => {
     const displayName = `${userRecord?.firstName || ''} ${userRecord?.lastName || ''}`.trim() || 'this user';
 
@@ -170,58 +137,30 @@ export default function UserFormScreen({ navigation, route }) {
         <Text style={[styles.title, { color: themeColors.text }]}>{isEditing ? 'User details' : 'Registration only'}</Text>
         <Text style={[styles.subtitle, { color: themeColors.textMuted }]}>
           {isEditing
-            ? 'Review and edit an existing account.'
+            ? 'Review this account and remove it if needed.'
             : 'New accounts are created from the registration screen.'}
         </Text>
 
         {isEditing ? (
           <>
-            <AppSelect items={roleItems} label="Role" value={form.role} onValueChange={handleRoleChange} />
-            <AppInput label="First name" value={form.firstName} onChangeText={(firstName) => setForm((current) => ({ ...current, firstName }))} />
-            <AppInput label="Last name" value={form.lastName} onChangeText={(lastName) => setForm((current) => ({ ...current, lastName }))} />
-            <AppInput
-              label="Email"
-              value={form.email}
-              autoCapitalize="none"
-              keyboardType="email-address"
-              onChangeText={(email) => setForm((current) => ({ ...current, email }))}
-            />
-            <AppInput
-              label="New password (optional)"
-              value={form.password}
-              secureTextEntry
-              onChangeText={(password) => setForm((current) => ({ ...current, password }))}
-            />
-            <AppInput label="Phone" value={form.phone} keyboardType="phone-pad" onChangeText={(phone) => setForm((current) => ({ ...current, phone }))} />
-            <AppInput label="Address" value={form.address} multiline onChangeText={(address) => setForm((current) => ({ ...current, address }))} />
-
-            {showNic ? (
-              <AppInput
-                label="NIC"
-                value={form.nic}
-                autoCapitalize="characters"
-                onChangeText={(nic) => setForm((current) => ({ ...current, nic }))}
-              />
-            ) : null}
-
-            {isDoctor ? (
-              <>
-                <AppInput
-                  label="Specialization"
-                  value={form.specialization}
-                  onChangeText={(specialization) => setForm((current) => ({ ...current, specialization }))}
-                />
-                <AppInput
+            <View style={[styles.detailsCard, { backgroundColor: themeColors.surfaceMuted, borderColor: themeColors.border }]}>
+              <DetailRow label="Role" value={roleItems.find((item) => item.value === form.role)?.label || form.role} />
+              <DetailRow label="First name" value={form.firstName || 'Not set'} />
+              <DetailRow label="Last name" value={form.lastName || 'Not set'} />
+              <DetailRow label="Email" value={form.email || 'Not set'} />
+              <DetailRow label="Phone" value={form.phone || 'Not set'} />
+              <DetailRow label="Address" value={form.address || 'Not set'} />
+              {showNic ? <DetailRow label="NIC" value={form.nic || 'Not set'} /> : null}
+              {isDoctor ? <DetailRow label="Specialization" value={form.specialization || 'Not set'} /> : null}
+              {isDoctor ? (
+                <DetailRow
                   label="SLMC registration number"
-                  value={form.slmcRegistrationNumber}
-                  autoCapitalize="characters"
-                  onChangeText={(slmcRegistrationNumber) => setForm((current) => ({ ...current, slmcRegistrationNumber }))}
+                  value={form.slmcRegistrationNumber || 'Not set'}
                 />
-              </>
-            ) : null}
+              ) : null}
+            </View>
 
             <View style={styles.actions}>
-              <AppButton title="Save changes" loading={submitting} onPress={handleSave} />
               <AppButton title="Delete user" variant="danger" onPress={handleDelete} />
             </View>
           </>
@@ -257,4 +196,22 @@ const styles = StyleSheet.create({
   actions: {
     gap: spacing.md,
   },
+  detailsCard: {
+    borderRadius: radii.md,
+    borderWidth: 1,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    gap: spacing.sm,
+  },
 });
+
+function DetailRow({ label, value }) {
+  const { colors: themeColors } = useTheme();
+
+  return (
+    <View>
+      <Text style={{ color: themeColors.textMuted, fontWeight: '700', marginBottom: 2 }}>{label}</Text>
+      <Text style={{ color: themeColors.text, lineHeight: 21 }}>{value}</Text>
+    </View>
+  );
+}

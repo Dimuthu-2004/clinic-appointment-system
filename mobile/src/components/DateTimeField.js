@@ -4,7 +4,15 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { radii, spacing, useTheme } from '../theme';
 import { formatDateOnly, formatDateTime, toDateKey } from '../utils/date';
 
-export default function DateTimeField({ label, value, onChange, mode = 'datetime', minimumDate, allowPastDates = false }) {
+export default function DateTimeField({
+  label,
+  value,
+  onChange,
+  mode = 'datetime',
+  minimumDate,
+  allowPastDates = false,
+  disabled = false,
+}) {
   const [showPicker, setShowPicker] = useState(false);
   const { colors, isDark } = useTheme();
 
@@ -28,10 +36,18 @@ export default function DateTimeField({ label, value, onChange, mode = 'datetime
   return (
     <View style={styles.wrapper}>
       <Text style={[styles.label, { color: colors.text }]}>{label}</Text>
-      <Pressable style={[styles.field, { backgroundColor: colors.surface, borderColor: colors.border }]} onPress={() => setShowPicker(true)}>
+      <Pressable
+        disabled={disabled}
+        style={[
+          styles.field,
+          { backgroundColor: colors.surface, borderColor: colors.border },
+          disabled && styles.disabled,
+        ]}
+        onPress={() => setShowPicker(true)}
+      >
         <Text style={[styles.value, { color: colors.text }]}>{mode === 'date' ? formatDateOnly(value) : formatDateTime(value)}</Text>
       </Pressable>
-      {showPicker ? (
+      {showPicker && !disabled ? (
         <DateTimePicker
           mode={mode}
           value={currentDate}
@@ -57,6 +73,9 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     paddingHorizontal: spacing.md,
     paddingVertical: 16,
+  },
+  disabled: {
+    opacity: 0.7,
   },
   value: {
   },

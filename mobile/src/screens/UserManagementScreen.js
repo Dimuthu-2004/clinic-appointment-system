@@ -54,7 +54,7 @@ export default function UserManagementScreen({ navigation }) {
       <View style={styles.header}>
         <View>
           <Text style={[styles.title, { color: themeColors.text }]}>Users</Text>
-          <Text style={[styles.subtitle, { color: themeColors.textMuted }]}>Review registered accounts by role.</Text>
+          <Text style={[styles.subtitle, { color: themeColors.textMuted }]}>Review registered accounts by role, open their details, and delete accounts when necessary.</Text>
         </View>
       </View>
 

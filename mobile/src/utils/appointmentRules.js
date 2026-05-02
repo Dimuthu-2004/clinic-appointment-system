@@ -44,6 +44,50 @@ export const getPatientCancellationState = (appointment) => {
   };
 };
 
+export const getPatientAppointmentEditState = (appointment, billing = null) => {
+  if (!appointment?.appointmentDate) {
+    return {
+      canEdit: false,
+      reason: 'A valid appointment date is required before updating.',
+    };
+  }
+
+  if (appointment.status === 'cancelled') {
+    return {
+      canEdit: false,
+      reason: 'Cancelled appointments cannot be updated.',
+    };
+  }
+
+  if (appointment.status === 'completed') {
+    return {
+      canEdit: false,
+      reason: 'Completed appointments cannot be updated.',
+    };
+  }
+
+  if (billing?.status === 'paid') {
+    return {
+      canEdit: false,
+      reason: 'Paid appointments can no longer be updated.',
+    };
+  }
+
+  const remainingMs = getAppointmentTimestamp(appointment.appointmentDate) - Date.now();
+
+  if (remainingMs < PATIENT_CANCELLATION_NOTICE_MS) {
+    return {
+      canEdit: false,
+      reason: 'Appointments can only be updated at least 6 hours before the scheduled time.',
+    };
+  }
+
+  return {
+    canEdit: true,
+    reason: '',
+  };
+};
+
 export const getDoctorStartState = (appointment) => {
   if (!appointment?.appointmentDate) {
     return {
