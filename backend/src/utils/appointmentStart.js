@@ -1,5 +1,6 @@
 const Billing = require('../models/Billing');
 const ApiError = require('./ApiError');
+const { getTodayDateKey, normalizeDateKey } = require('./clinicSchedule');
 
 const ensureDoctorCanStartAppointment = async ({ reqUser, appointment }) => {
   if (reqUser.role !== 'doctor' || !appointment) {
@@ -8,6 +9,10 @@ const ensureDoctorCanStartAppointment = async ({ reqUser, appointment }) => {
 
   if (String(appointment.doctor) !== String(reqUser._id)) {
     throw new ApiError(403, 'You can only start appointments assigned to you');
+  }
+
+  if (normalizeDateKey(appointment.appointmentDate) !== getTodayDateKey()) {
+    throw new ApiError(422, 'Doctors can only start appointments on the scheduled day');
   }
 
   if (appointment.status === 'cancelled') {

@@ -1,3 +1,5 @@
+import { getTodayDateKey, toDateKey } from './clinicSchedule';
+
 export const PATIENT_CANCELLATION_NOTICE_MS = 6 * 60 * 60 * 1000;
 
 const getAppointmentTimestamp = (appointmentDate) => {
@@ -61,6 +63,13 @@ export const getDoctorStartState = (appointment) => {
     return {
       canStart: false,
       reason: 'This appointment has already been finished.',
+    };
+  }
+
+  if (toDateKey(appointment.appointmentDate) !== getTodayDateKey()) {
+    return {
+      canStart: false,
+      reason: 'Doctors can only start appointments on the scheduled day.',
     };
   }
 
