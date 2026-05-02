@@ -9,7 +9,7 @@ import { isStrongPassword, isValidEmail, passwordRequirementsMessage } from '../
 
 export default function ForgotPasswordScreen({ navigation, route }) {
   const { colors: themeColors } = useTheme();
-  const { user, requestPasswordReset, resetPassword } = useAuth();
+  const { user, requestPasswordReset, resetPassword, updateProfile } = useAuth();
   const initialEmail = useMemo(
     () => String(route.params?.email || user?.recoveryEmail || user?.email || '').trim().toLowerCase(),
     [route.params?.email, user?.recoveryEmail, user?.email]
@@ -32,6 +32,11 @@ export default function ForgotPasswordScreen({ navigation, route }) {
       ((normalizedAccountEmail && normalizedFormEmail !== normalizedAccountEmail) ||
         (normalizedRecoveryEmail && normalizedFormEmail !== normalizedRecoveryEmail))
   );
+  const shouldLinkRecoveryEmail =
+    Boolean(user?._id) &&
+    Boolean(normalizedFormEmail) &&
+    normalizedFormEmail !== normalizedAccountEmail &&
+    normalizedFormEmail !== normalizedRecoveryEmail;
 
   const handleSendCode = async () => {
     if (!isValidEmail(form.email)) {
@@ -42,11 +47,16 @@ export default function ForgotPasswordScreen({ navigation, route }) {
     try {
       setSendingCode(true);
       setError('');
+      if (shouldLinkRecoveryEmail) {
+        await updateProfile({ recoveryEmail: normalizedFormEmail });
+      }
       await requestPasswordReset(form.email);
       setCodeRequested(true);
       Alert.alert(
         'Check your email',
-        'If that email matches a Smart Clinic account, a 6-digit reset code will be sent shortly.'
+        shouldLinkRecoveryEmail
+          ? 'Your recovery email was updated and a 6-digit reset code will be sent there shortly.'
+          : 'If that email matches a Smart Clinic account, a 6-digit reset code will be sent shortly.'
       );
     } catch (requestError) {
       setError(requestError?.response?.data?.message || requestError?.message || 'Unable to send reset code.');
