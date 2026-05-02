@@ -4,23 +4,20 @@ const connectDatabase = require('./config/db');
 
 const PORT = process.env.PORT || 5000;
 const DB_RETRY_DELAY_MS = 5000;
-let serverStarted = false;
 
-const startServer = async () => {
+app.listen(PORT, () => {
+  console.log(`Server listening on port ${PORT}`);
+});
+
+const startDatabase = async () => {
   try {
     await connectDatabase();
-
-    if (!serverStarted) {
-      app.listen(PORT, () => {
-        console.log(`Server listening on port ${PORT}`);
-      });
-      serverStarted = true;
-    }
+    console.log('MongoDB connected');
   } catch (error) {
-    console.error('Failed to start server', error);
+    console.error('Failed to connect to database', error);
     console.log(`Retrying database connection in ${DB_RETRY_DELAY_MS / 1000} seconds...`);
-    setTimeout(startServer, DB_RETRY_DELAY_MS);
+    setTimeout(startDatabase, DB_RETRY_DELAY_MS);
   }
 };
 
-startServer();
+startDatabase();
