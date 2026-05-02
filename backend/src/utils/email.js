@@ -3,6 +3,8 @@ const ApiError = require('./ApiError');
 
 const parseBoolean = (value) => String(value || '').trim().toLowerCase() === 'true';
 
+const normalizeSmtpPassword = (value) => String(value || '').trim().replace(/\s+/g, '');
+
 const isEmailServiceConfigured = () =>
   Boolean(
     process.env.SMTP_HOST &&
@@ -18,8 +20,8 @@ const getTransporter = () =>
     port: Number(process.env.SMTP_PORT || 587),
     secure: parseBoolean(process.env.SMTP_SECURE),
     auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
+      user: String(process.env.SMTP_USER || '').trim(),
+      pass: normalizeSmtpPassword(process.env.SMTP_PASS),
     },
   });
 

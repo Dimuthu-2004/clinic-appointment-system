@@ -24,6 +24,11 @@ export default function ForgotPasswordScreen({ navigation, route }) {
   const [sendingCode, setSendingCode] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [error, setError] = useState('');
+  const normalizedAccountEmail = String(user?.email || '').trim().toLowerCase();
+  const normalizedFormEmail = String(form.email || '').trim().toLowerCase();
+  const enteredEmailDiffersFromAccount = Boolean(
+    normalizedAccountEmail && normalizedFormEmail && normalizedAccountEmail !== normalizedFormEmail
+  );
 
   const handleSendCode = async () => {
     if (!isValidEmail(form.email)) {
@@ -101,6 +106,26 @@ export default function ForgotPasswordScreen({ navigation, route }) {
           placeholder="patient@clinic.com"
           value={form.email}
         />
+
+        {normalizedAccountEmail ? (
+          <View style={styles.emailHintBox}>
+            <Text style={[styles.emailHint, { color: themeColors.textMuted }]}>
+              Your current Smart Clinic account email is {normalizedAccountEmail}.
+            </Text>
+            {enteredEmailDiffersFromAccount ? (
+              <Pressable
+                onPress={() => setForm((current) => ({ ...current, email: normalizedAccountEmail }))}
+                style={styles.useAccountEmailButton}
+              >
+                <Text style={styles.link}>Use my account email</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : (
+          <Text style={[styles.emailHint, { color: themeColors.textMuted }]}>
+            Use the exact email saved on the Smart Clinic account you want to recover.
+          </Text>
+        )}
 
         {codeRequested ? (
           <>
@@ -189,6 +214,19 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     lineHeight: 20,
     marginBottom: spacing.md,
+  },
+  emailHintBox: {
+    marginBottom: spacing.md,
+    gap: spacing.xs,
+  },
+  emailHint: {
+    color: colors.textMuted,
+    lineHeight: 20,
+    marginBottom: spacing.md,
+  },
+  useAccountEmailButton: {
+    alignSelf: 'flex-start',
+    marginTop: -spacing.xs,
   },
   error: {
     color: colors.danger,

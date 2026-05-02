@@ -139,6 +139,10 @@ const requestPasswordReset = asyncHandler(async (req, res) => {
   const user = await User.findOne({ email }).select('+passwordResetCodeHash +passwordResetExpiresAt');
 
   if (!user) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn(`[auth] Password reset requested for missing email: ${email}`);
+    }
+
     res.status(200).json({
       success: true,
       message: 'If that email matches a Smart Clinic account, a password reset code will be sent shortly.',
@@ -159,6 +163,10 @@ const requestPasswordReset = asyncHandler(async (req, res) => {
     resetCode,
     expiresInMinutes,
   });
+
+  if (process.env.NODE_ENV !== 'production') {
+    console.info(`[auth] Password reset code email sent to: ${user.email}`);
+  }
 
   res.status(200).json({
     success: true,
