@@ -189,6 +189,12 @@ export default function LandingScreen({ navigation }) {
             <Text style={[styles.reviewMeta, { color: themeColors.textMuted }]}>
               {activeReview.patient?.firstName} {activeReview.patient?.lastName}
             </Text>
+            {activeReview.doctor ? (
+              <Text style={[styles.reviewMeta, { color: themeColors.textMuted }]}>
+                Dr {activeReview.doctor.firstName} {activeReview.doctor.lastName}
+                {activeReview.doctor.specialization ? ` | ${activeReview.doctor.specialization}` : ''}
+              </Text>
+            ) : null}
           </Animated.View>
           <View style={styles.reviewDots}>
             {reviews.map((review, index) => (

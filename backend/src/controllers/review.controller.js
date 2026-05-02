@@ -190,10 +190,13 @@ const updateReview = asyncHandler(async (req, res) => {
         type: 'feedback',
         title: 'Reply to your feedback',
         message: appointmentDate
-          ? `An admin replied to your feedback for the appointment on ${formatNotificationDateTime(appointmentDate)}.`
-          : 'An admin replied to your feedback.',
+          ? `An admin replied to your feedback for the appointment on ${formatNotificationDateTime(appointmentDate)}: ${nextReply}`
+          : `An admin replied to your feedback: ${nextReply}`,
         entityModel: 'Review',
         entityId: review._id,
+        metadata: {
+          adminReply: nextReply,
+        },
       });
     }
   } else if (String(review.patient) === String(req.user._id)) {

@@ -139,11 +139,7 @@ const requestPasswordReset = asyncHandler(async (req, res) => {
   const user = await User.findOne({ email }).select('+passwordResetCodeHash +passwordResetExpiresAt');
 
   if (!user) {
-    res.status(200).json({
-      success: true,
-      message: 'If that email exists, a password reset code has been sent.',
-    });
-    return;
+    throw new ApiError(404, 'No Smart Clinic account was found for that email address');
   }
 
   const resetCode = buildPasswordResetCode();
@@ -162,7 +158,7 @@ const requestPasswordReset = asyncHandler(async (req, res) => {
 
   res.status(200).json({
     success: true,
-    message: 'If that email exists, a password reset code has been sent.',
+    message: 'A password reset code has been sent to your email address.',
   });
 });
 

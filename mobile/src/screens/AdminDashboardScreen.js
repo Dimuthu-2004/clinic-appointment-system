@@ -16,6 +16,16 @@ import { getTodayDateKey, toDateKey } from '../utils/clinicSchedule';
 import { dashboardHeroImages } from '../utils/dashboardImages';
 import { formatCurrency, formatDateTime } from '../utils/date';
 
+const shiftMonth = (dateKey, amount) => {
+  const baseDate = new Date(`${dateKey}T00:00:00`);
+  return toDateKey(new Date(baseDate.getFullYear(), baseDate.getMonth() + amount, 1));
+};
+
+const getMonthLabel = (dateKey) => {
+  const date = new Date(`${dateKey}T00:00:00`);
+  return date.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+};
+
 export default function AdminDashboardScreen({ navigation }) {
   const { user } = useAuth();
   const { colors: themeColors, isDark } = useTheme();
@@ -34,6 +44,8 @@ export default function AdminDashboardScreen({ navigation }) {
   const [doctors, setDoctors] = useState([]);
   const [appointments, setAppointments] = useState([]);
   const [selectedDate, setSelectedDate] = useState(getTodayDateKey());
+  const [indicatorMonth, setIndicatorMonth] = useState(getTodayDateKey());
+  const [appointmentSearch, setAppointmentSearch] = useState('');
   const [defaultAppointmentFee, setDefaultAppointmentFee] = useState({ amount: 2500, currency: 'LKR' });
   const [selectedFeeDoctorId, setSelectedFeeDoctorId] = useState('');
   const [doctorFee, setDoctorFee] = useState({ amount: '2500', currency: 'LKR' });
@@ -113,9 +125,49 @@ export default function AdminDashboardScreen({ navigation }) {
   );
 
   const selectedAppointments = useMemo(
-    () => appointments.filter((appointment) => toDateKey(appointment.appointmentDate) === selectedDate),
-    [appointments, selectedDate]
+    () =>
+      appointments
+        .filter((appointment) => toDateKey(appointment.appointmentDate) === selectedDate)
+        .filter((appointment) => {
+          const search = appointmentSearch.trim().toLowerCase();
+
+          if (!search) {
+            return true;
+          }
+
+          return [
+            `${appointment.patient?.firstName || ''} ${appointment.patient?.lastName || ''}`,
+            `${appointment.doctor?.firstName || ''} ${appointment.doctor?.lastName || ''}`,
+            appointment.reason || '',
+            appointment.appointmentSession || '',
+            appointment.status || '',
+            String(appointment.tokenNumber || ''),
+          ]
+            .some((value) => String(value).toLowerCase().includes(search));
+        }),
+    [appointmentSearch, appointments, selectedDate]
   );
+
+  const indicatorDates = useMemo(() => {
+    const counts = new Map();
+
+    appointments.forEach((appointment) => {
+      const dateKey = toDateKey(appointment?.appointmentDate);
+
+      if (!dateKey) {
+        return;
+      }
+
+      counts.set(dateKey, (counts.get(dateKey) || 0) + 1);
+    });
+
+    const monthPrefix = indicatorMonth.slice(0, 7);
+
+    return [...counts.entries()]
+      .filter(([dateKey]) => dateKey.startsWith(monthPrefix))
+      .sort((left, right) => left[0].localeCompare(right[0]))
+      .map(([dateKey, count]) => ({ dateKey, count }));
+  }, [appointments, indicatorMonth]);
 
   const handleFeeDoctorChange = (doctorId) => {
     const doctor = doctors.find((item) => item._id === doctorId);
@@ -259,8 +311,73 @@ export default function AdminDashboardScreen({ navigation }) {
           allowPastDates
           label="Select appointment date"
           mode="date"
-          onChange={setSelectedDate}
+          onChange={(dateKey) => {
+            setSelectedDate(dateKey);
+            setIndicatorMonth(dateKey);
+          }}
           value={selectedDate}
+        />
+        <View style={styles.indicatorHeader}>
+          <Text style={[styles.indicatorMonthLabel, { color: themeColors.primaryDark }]}>
+            {getMonthLabel(indicatorMonth)}
+          </Text>
+          <View style={styles.indicatorActions}>
+            <AppButton onPress={() => setIndicatorMonth(shiftMonth(indicatorMonth, -1))} title="Prev" variant="secondary" />
+            <AppButton onPress={() => setIndicatorMonth(shiftMonth(indicatorMonth, 1))} title="Next" variant="secondary" />
+          </View>
+        </View>
+        {indicatorDates.length ? (
+          <View style={styles.indicatorRow}>
+            {indicatorDates.map((item) => {
+              const isSelected = item.dateKey === selectedDate;
+
+              return (
+                <Pressable
+                  key={item.dateKey}
+                  onPress={() => setSelectedDate(item.dateKey)}
+                  style={[
+                    styles.indicatorPill,
+                    {
+                      backgroundColor: isSelected
+                        ? themeColors.primaryDark
+                        : isDark
+                          ? themeColors.surfaceMuted
+                          : '#F8FBFC',
+                      borderColor: isSelected ? themeColors.primaryDark : themeColors.border,
+                    },
+                  ]}
+                >
+                  <View
+                    style={[
+                      styles.indicatorDot,
+                      { backgroundColor: isSelected ? '#FCD34D' : themeColors.secondary },
+                    ]}
+                  />
+                  <Text style={[styles.indicatorDate, { color: isSelected ? colors.surface : themeColors.text }]}>
+                    {new Date(`${item.dateKey}T00:00:00`).getDate()}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.indicatorCount,
+                      { color: isSelected ? colors.surface : themeColors.textMuted },
+                    ]}
+                  >
+                    {item.count}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        ) : (
+          <Text style={[styles.emptyAppointments, { color: themeColors.textMuted }]}>
+            No appointments were found for this month.
+          </Text>
+        )}
+        <AppInput
+          label="Search appointments"
+          onChangeText={setAppointmentSearch}
+          placeholder="Search patient, doctor, token, reason, or status"
+          value={appointmentSearch}
         />
         {selectedAppointments.length === 0 ? (
           <Text style={[styles.emptyAppointments, { color: themeColors.textMuted }]}>No appointments found for the selected date.</Text>
@@ -448,6 +565,48 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     marginBottom: spacing.lg,
     ...shadow,
+  },
+  indicatorHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  indicatorMonthLabel: {
+    fontSize: 16,
+    fontWeight: '800',
+    flex: 1,
+  },
+  indicatorActions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  indicatorRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+    marginBottom: spacing.md,
+  },
+  indicatorPill: {
+    minWidth: 64,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  indicatorDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 999,
+    marginBottom: spacing.xs,
+  },
+  indicatorDate: {
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  indicatorCount: {
+    fontSize: 11,
   },
   appointmentRow: {
     backgroundColor: '#F8FBFC',

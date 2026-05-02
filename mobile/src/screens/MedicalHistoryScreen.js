@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Animated, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useIsFocused } from '@react-navigation/native';
 import api from '../api/client';
 import EmptyState from '../components/EmptyState';
 import LoadingOverlay from '../components/LoadingOverlay';
@@ -18,6 +19,7 @@ const metricConfigs = [
 
 export default function MedicalHistoryScreen({ route }) {
   const { colors: themeColors } = useTheme();
+  const isFocused = useIsFocused();
   const patientId = route.params?.patientId;
   const patientName = route.params?.patientName || 'Patient';
   const [history, setHistory] = useState(null);
@@ -25,6 +27,10 @@ export default function MedicalHistoryScreen({ route }) {
   const cardAnimation = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    if (!isFocused) {
+      return;
+    }
+
     const loadHistory = async () => {
       try {
         setLoading(true);
@@ -38,7 +44,7 @@ export default function MedicalHistoryScreen({ route }) {
     };
 
     loadHistory();
-  }, [patientId]);
+  }, [isFocused, patientId]);
 
   useEffect(() => {
     if (loading || !history) {

@@ -47,8 +47,9 @@ const sendEmail = async ({ to, subject, text, html }) => {
       text,
       html,
     });
-  } catch (_error) {
-    throw new ApiError(502, 'Unable to send the password reset email right now');
+  } catch (error) {
+    const smtpMessage = error?.message ? ` (${error.message})` : '';
+    throw new ApiError(502, `Unable to send the password reset email right now${smtpMessage}`);
   }
 };
 

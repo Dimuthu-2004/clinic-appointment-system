@@ -107,7 +107,11 @@ export default function NotificationListScreen() {
             ]}
             onPress={() => handleOpenNotification(notification)}
             status={notification.isRead ? 'completed' : 'active'}
-            subtitle={notification.message}
+            subtitle={
+              notification.type === 'feedback' && notification.metadata?.adminReply
+                ? `${notification.message}\n\nReply: ${notification.metadata.adminReply}`
+                : notification.message
+            }
             title={notification.title}
             footer={
               <View style={styles.footerBlock}>
