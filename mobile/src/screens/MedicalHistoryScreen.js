@@ -8,10 +8,12 @@ import { colors, radii, spacing, useTheme } from '../theme';
 import { formatDateOnly, formatDateTime } from '../utils/date';
 
 const metricConfigs = [
-  { key: 'heartRate', label: 'Heart rate', unit: 'bpm', color: '#0E7490' },
-  { key: 'temperatureCelsius', label: 'Temperature', unit: 'C', color: '#F97316' },
-  { key: 'oxygenSaturation', label: 'Oxygen', unit: '%', color: '#16A34A' },
-  { key: 'weightKg', label: 'Weight', unit: 'kg', color: '#7C3AED' },
+  { key: 'heartRate', label: 'Heart rate', unit: 'bpm', color: '#0E7490', decimals: 0 },
+  { key: 'respiratoryRate', label: 'Respiratory rate', unit: 'breaths/min', color: '#0891B2', decimals: 0 },
+  { key: 'temperatureCelsius', label: 'Temperature', unit: 'C', color: '#F97316', decimals: 1 },
+  { key: 'oxygenSaturation', label: 'Oxygen', unit: '%', color: '#16A34A', decimals: 0 },
+  { key: 'weightKg', label: 'Weight', unit: 'kg', color: '#7C3AED', decimals: 1 },
+  { key: 'heightCm', label: 'Height', unit: 'cm', color: '#DB2777', decimals: 0 },
 ];
 
 export default function MedicalHistoryScreen({ route }) {
@@ -104,17 +106,22 @@ export default function MedicalHistoryScreen({ route }) {
         )}
       </Section>
 
-      <Section title="Clinical vitals">
+      <Section title="Clinical vitals trends">
+        <BloodPressureTrendCard items={history.vitalsSummary || []} />
         {metricConfigs.map((metric) => (
           <VitalsMetricCard
             key={metric.key}
             color={metric.color}
+            decimals={metric.decimals}
             items={history.vitalsSummary || []}
             label={metric.label}
             metricKey={metric.key}
             unit={metric.unit}
           />
         ))}
+        {!hasAnyTrendData(history.vitalsSummary || []) ? (
+          <EmptyState message="No clinical vitals were recorded across these visits yet." title="No vitals" />
+        ) : null}
       </Section>
 
       <Section title="Medical record timeline">
@@ -216,7 +223,7 @@ function VisitTimeline({ items }) {
   );
 }
 
-function VitalsMetricCard({ items, metricKey, label, unit, color }) {
+function VitalsMetricCard({ items, metricKey, label, unit, color, decimals = 0 }) {
   const { colors: themeColors } = useTheme();
   const filteredItems = items.filter((item) => item[metricKey] !== null && item[metricKey] !== undefined);
 
@@ -233,11 +240,73 @@ function VitalsMetricCard({ items, metricKey, label, unit, color }) {
         <AnimatedBar
           key={`${metricKey}-${item.recordId || index}`}
           color={color}
-          footer={`${Number(item[metricKey]).toFixed(metricKey === 'temperatureCelsius' ? 1 : 0)} ${unit}`}
+          footer={`${Number(item[metricKey]).toFixed(decimals)} ${unit}`}
           label={formatDateOnly(item.date)}
           maxValue={maxValue}
           value={Number(item[metricKey])}
         />
+      ))}
+    </View>
+  );
+}
+
+function BloodPressureTrendCard({ items }) {
+  const { colors: themeColors, isDark } = useTheme();
+  const filteredItems = items
+    .map((item) => ({
+      ...item,
+      parsed: parseBloodPressure(item.bloodPressure),
+    }))
+    .filter((item) => item.parsed);
+
+  if (!filteredItems.length) {
+    return null;
+  }
+
+  const maxValue = Math.max(...filteredItems.flatMap((item) => [item.parsed.systolic, item.parsed.diastolic]), 1);
+
+  return (
+    <View style={[styles.metricCard, { backgroundColor: themeColors.surface, borderColor: themeColors.border }]}>
+      <Text style={[styles.metricTitle, { color: themeColors.text }]}>Blood pressure</Text>
+      {filteredItems.map((item, index) => (
+        <View key={`bp-${item.recordId || index}`} style={styles.bpRow}>
+          <View style={styles.barHeader}>
+            <Text style={[styles.barLabel, { color: themeColors.text }]}>{formatDateOnly(item.date)}</Text>
+            <Text style={[styles.barValue, { color: themeColors.textMuted }]}>
+              {item.parsed.systolic}/{item.parsed.diastolic} mmHg
+            </Text>
+          </View>
+          <View style={styles.bpBars}>
+            <View style={styles.bpBarBlock}>
+              <Text style={[styles.bpLegend, { color: themeColors.textMuted }]}>SYS</Text>
+              <View style={[styles.barTrack, { backgroundColor: isDark ? '#244751' : '#DCEBED' }]}>
+                <View
+                  style={[
+                    styles.barFillStatic,
+                    {
+                      backgroundColor: '#DC2626',
+                      width: `${(item.parsed.systolic / maxValue) * 100}%`,
+                    },
+                  ]}
+                />
+              </View>
+            </View>
+            <View style={styles.bpBarBlock}>
+              <Text style={[styles.bpLegend, { color: themeColors.textMuted }]}>DIA</Text>
+              <View style={[styles.barTrack, { backgroundColor: isDark ? '#244751' : '#DCEBED' }]}>
+                <View
+                  style={[
+                    styles.barFillStatic,
+                    {
+                      backgroundColor: '#2563EB',
+                      width: `${(item.parsed.diastolic / maxValue) * 100}%`,
+                    },
+                  ]}
+                />
+              </View>
+            </View>
+          </View>
+        </View>
       ))}
     </View>
   );
@@ -288,6 +357,9 @@ function formatVitalsInline(vitals = {}) {
   if (vitals.heartRate !== null && vitals.heartRate !== undefined) {
     parts.push(`HR ${vitals.heartRate} bpm`);
   }
+  if (vitals.respiratoryRate !== null && vitals.respiratoryRate !== undefined) {
+    parts.push(`RR ${vitals.respiratoryRate}/min`);
+  }
   if (vitals.temperatureCelsius !== null && vitals.temperatureCelsius !== undefined) {
     parts.push(`Temp ${Number(vitals.temperatureCelsius).toFixed(1)} C`);
   }
@@ -297,8 +369,43 @@ function formatVitalsInline(vitals = {}) {
   if (vitals.weightKg !== null && vitals.weightKg !== undefined) {
     parts.push(`Wt ${vitals.weightKg} kg`);
   }
+  if (vitals.heightCm !== null && vitals.heightCm !== undefined) {
+    parts.push(`Ht ${vitals.heightCm} cm`);
+  }
 
   return parts.length ? parts.join(' | ') : 'No vitals entered';
+}
+
+function parseBloodPressure(value) {
+  if (!value) {
+    return null;
+  }
+
+  const match = String(value).trim().match(/^(\d{2,3})\/(\d{2,3})$/);
+  if (!match) {
+    return null;
+  }
+
+  return {
+    systolic: Number(match[1]),
+    diastolic: Number(match[2]),
+  };
+}
+
+function hasAnyTrendData(items) {
+  return items.some((item) => {
+    const vitals = [
+      item.bloodPressure,
+      item.heartRate,
+      item.respiratoryRate,
+      item.temperatureCelsius,
+      item.oxygenSaturation,
+      item.weightKg,
+      item.heightCm,
+    ];
+
+    return vitals.some((value) => value !== null && value !== undefined && value !== '');
+  });
 }
 
 const styles = StyleSheet.create({
@@ -430,6 +537,23 @@ const styles = StyleSheet.create({
   barFill: {
     height: '100%',
     borderRadius: 999,
+  },
+  barFillStatic: {
+    height: '100%',
+    borderRadius: 999,
+  },
+  bpRow: {
+    marginBottom: spacing.md,
+  },
+  bpBars: {
+    gap: spacing.xs,
+  },
+  bpBarBlock: {
+    gap: spacing.xs,
+  },
+  bpLegend: {
+    fontSize: 12,
+    fontWeight: '700',
   },
   recordCard: {
     backgroundColor: colors.surface,

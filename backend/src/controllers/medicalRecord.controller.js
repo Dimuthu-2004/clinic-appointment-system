@@ -423,21 +423,27 @@ const getDoctorPatientHistory = asyncHandler(async (req, res) => {
       (record) =>
         record.clinicalVitals &&
         [
+          record.clinicalVitals.bloodPressure,
           record.clinicalVitals.temperatureCelsius,
           record.clinicalVitals.heartRate,
+          record.clinicalVitals.respiratoryRate,
           record.clinicalVitals.oxygenSaturation,
           record.clinicalVitals.weightKg,
-        ].some((value) => value !== null && value !== undefined)
+          record.clinicalVitals.heightCm,
+        ].some((value) => value !== null && value !== undefined && value !== '')
     )
     .slice()
     .reverse()
     .map((record) => ({
       recordId: record._id,
       date: record.createdAt,
+      bloodPressure: record.clinicalVitals.bloodPressure,
       temperatureCelsius: record.clinicalVitals.temperatureCelsius,
       heartRate: record.clinicalVitals.heartRate,
+      respiratoryRate: record.clinicalVitals.respiratoryRate,
       oxygenSaturation: record.clinicalVitals.oxygenSaturation,
       weightKg: record.clinicalVitals.weightKg,
+      heightCm: record.clinicalVitals.heightCm,
     }));
 
   res.status(200).json({

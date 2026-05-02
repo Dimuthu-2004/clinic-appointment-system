@@ -100,6 +100,8 @@ export default function MedicalRecordFormScreen({ navigation, route }) {
   const [uploading, setUploading] = useState(false);
   const [activeSection, setActiveSection] = useState('notes');
   const [vitalErrors, setVitalErrors] = useState({});
+  const [attachments, setAttachments] = useState(existingRecord?.attachments || []);
+  const [pendingAttachments, setPendingAttachments] = useState([]);
   const [form, setForm] = useState({
     patient: linkedAppointment?.patient?._id || existingRecord?.patient?._id || '',
     appointment: linkedAppointment?._id || existingRecord?.appointment?._id || '',
@@ -138,6 +140,10 @@ export default function MedicalRecordFormScreen({ navigation, route }) {
     loadOptions();
   }, [canEdit, isDoctorStartMode]);
 
+  useEffect(() => {
+    setAttachments(existingRecord?.attachments || []);
+  }, [existingRecord?._id]);
+
   const appointmentSummary = useMemo(() => {
     if (!linkedAppointment) {
       return null;
@@ -150,6 +156,29 @@ export default function MedicalRecordFormScreen({ navigation, route }) {
       date: linkedAppointment.appointmentDate,
     };
   }, [linkedAppointment]);
+
+  const uploadSelectedAttachments = async (recordId, files) => {
+    if (!recordId || !files.length) {
+      return null;
+    }
+
+    const formData = new FormData();
+    files.forEach((file) => {
+      formData.append('attachments', {
+        uri: file.uri,
+        name: file.name,
+        type: file.mimeType || 'application/octet-stream',
+      });
+    });
+
+    const response = await api.post(`/medical-records/${recordId}/attachments`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+
+    return response.data.data;
+  };
 
   const handleSave = async () => {
     const targetPatient = isDoctorStartMode ? linkedAppointment?.patient?._id : form.patient;
@@ -199,13 +228,36 @@ export default function MedicalRecordFormScreen({ navigation, route }) {
         payload.doctor = targetDoctor;
       }
 
-      if (existingRecord?._id) {
-        await api.put(`/medical-records/${existingRecord._id}`, payload);
-      } else {
-        await api.post('/medical-records', payload);
+      const response = existingRecord?._id
+        ? await api.put(`/medical-records/${existingRecord._id}`, payload)
+        : await api.post('/medical-records', payload);
+
+      const savedRecord = response.data?.data;
+      const savedRecordId = savedRecord?._id || existingRecord?._id;
+
+      if (pendingAttachments.length && savedRecordId) {
+        try {
+          const updatedRecord = await uploadSelectedAttachments(savedRecordId, pendingAttachments);
+          setAttachments(updatedRecord?.attachments || savedRecord?.attachments || []);
+          setPendingAttachments([]);
+        } catch (uploadError) {
+          Alert.alert(
+            'Saved with file issue',
+            uploadError?.response?.data?.message || 'The record was saved, but attachment upload failed.'
+          );
+          navigation.goBack();
+          return;
+        }
       }
 
-      Alert.alert('Saved', isDoctorStartMode ? 'Appointment notes saved successfully.' : 'Medical record saved successfully.');
+      Alert.alert(
+        'Saved',
+        pendingAttachments.length
+          ? 'Medical record saved and selected files were added.'
+          : isDoctorStartMode
+            ? 'Appointment notes saved successfully.'
+            : 'Medical record saved successfully.'
+      );
       navigation.goBack();
     } catch (error) {
       Alert.alert('Save failed', error?.response?.data?.message || 'Unable to save medical record.');
@@ -241,36 +293,30 @@ export default function MedicalRecordFormScreen({ navigation, route }) {
     ]);
   };
 
-  const handleUploadAttachment = async () => {
-    if (!existingRecord?._id) {
-      Alert.alert('Save first', 'Save the record first, then upload supporting files.');
-      return;
-    }
-
+  const handlePickAttachment = async () => {
     try {
-      const result = await DocumentPicker.getDocumentAsync({ copyToCacheDirectory: true });
+      const result = await DocumentPicker.getDocumentAsync({
+        copyToCacheDirectory: true,
+        multiple: true,
+        type: '*/*',
+      });
 
       if (result.canceled || !result.assets?.length) {
         return;
       }
 
-      const file = result.assets[0];
-      const formData = new FormData();
-      formData.append('attachments', {
-        uri: file.uri,
-        name: file.name,
-        type: file.mimeType || 'application/octet-stream',
-      });
+      if (existingRecord?._id) {
+        setUploading(true);
+        const updatedRecord = await uploadSelectedAttachments(existingRecord._id, result.assets);
+        setAttachments(updatedRecord?.attachments || []);
+        Alert.alert(
+          'Uploaded',
+          result.assets.length > 1 ? 'Attachments uploaded successfully.' : 'Attachment uploaded successfully.'
+        );
+        return;
+      }
 
-      setUploading(true);
-      await api.post(`/medical-records/${existingRecord._id}/attachments`, formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
-
-      Alert.alert('Uploaded', 'Attachment uploaded successfully.');
-      navigation.goBack();
+      setPendingAttachments((current) => [...current, ...result.assets]);
     } catch (error) {
       Alert.alert('Upload failed', error?.response?.data?.message || 'Unable to upload attachment.');
     } finally {
@@ -278,10 +324,14 @@ export default function MedicalRecordFormScreen({ navigation, route }) {
     }
   };
 
+  const handleRemovePendingAttachment = (uri) => {
+    setPendingAttachments((current) => current.filter((file) => file.uri !== uri));
+  };
+
   const handleDeleteAttachment = async (attachmentId) => {
     try {
-      await api.delete(`/medical-records/${existingRecord._id}/attachments/${attachmentId}`);
-      navigation.goBack();
+      const response = await api.delete(`/medical-records/${existingRecord._id}/attachments/${attachmentId}`);
+      setAttachments(response.data?.data?.attachments || []);
     } catch (error) {
       Alert.alert('Delete failed', error?.response?.data?.message || 'Unable to remove attachment.');
     }
@@ -368,12 +418,14 @@ export default function MedicalRecordFormScreen({ navigation, route }) {
         {activeSection === 'notes' ? (
           <>
             <AppInput
+              autoCapitalize="sentences"
               editable={canEditCurrentForm}
               label="Diagnosis"
               onChangeText={(diagnosis) => setForm((current) => ({ ...current, diagnosis }))}
               value={form.diagnosis}
             />
             <AppInput
+              autoCapitalize="sentences"
               editable={canEditCurrentForm}
               label="Medical notes"
               multiline
@@ -381,6 +433,7 @@ export default function MedicalRecordFormScreen({ navigation, route }) {
               value={form.notes}
             />
             <AppInput
+              autoCapitalize="sentences"
               editable={canEditCurrentForm}
               label="Symptoms"
               multiline
@@ -388,6 +441,7 @@ export default function MedicalRecordFormScreen({ navigation, route }) {
               value={form.symptoms}
             />
             <AppInput
+              autoCapitalize="sentences"
               editable={canEditCurrentForm}
               label="Treatment plan"
               multiline
@@ -398,6 +452,8 @@ export default function MedicalRecordFormScreen({ navigation, route }) {
         ) : (
           <>
             <AppInput
+              autoCapitalize="none"
+              autoCorrect={false}
               editable={canEditCurrentForm}
               error={vitalErrors.bloodPressure}
               label="Blood pressure"
@@ -406,6 +462,8 @@ export default function MedicalRecordFormScreen({ navigation, route }) {
               value={vitals.bloodPressure}
             />
             <AppInput
+              autoCapitalize="none"
+              autoCorrect={false}
               editable={canEditCurrentForm}
               error={vitalErrors.heartRate}
               keyboardType="numeric"
@@ -415,6 +473,8 @@ export default function MedicalRecordFormScreen({ navigation, route }) {
               value={vitals.heartRate}
             />
             <AppInput
+              autoCapitalize="none"
+              autoCorrect={false}
               editable={canEditCurrentForm}
               error={vitalErrors.respiratoryRate}
               keyboardType="numeric"
@@ -424,6 +484,8 @@ export default function MedicalRecordFormScreen({ navigation, route }) {
               value={vitals.respiratoryRate}
             />
             <AppInput
+              autoCapitalize="none"
+              autoCorrect={false}
               editable={canEditCurrentForm}
               error={vitalErrors.temperatureCelsius}
               keyboardType="numeric"
@@ -433,6 +495,8 @@ export default function MedicalRecordFormScreen({ navigation, route }) {
               value={vitals.temperatureCelsius}
             />
             <AppInput
+              autoCapitalize="none"
+              autoCorrect={false}
               editable={canEditCurrentForm}
               error={vitalErrors.oxygenSaturation}
               keyboardType="numeric"
@@ -442,6 +506,8 @@ export default function MedicalRecordFormScreen({ navigation, route }) {
               value={vitals.oxygenSaturation}
             />
             <AppInput
+              autoCapitalize="none"
+              autoCorrect={false}
               editable={canEditCurrentForm}
               error={vitalErrors.weightKg}
               keyboardType="numeric"
@@ -451,6 +517,8 @@ export default function MedicalRecordFormScreen({ navigation, route }) {
               value={vitals.weightKg}
             />
             <AppInput
+              autoCapitalize="none"
+              autoCorrect={false}
               editable={canEditCurrentForm}
               error={vitalErrors.heightCm}
               keyboardType="numeric"
@@ -463,8 +531,8 @@ export default function MedicalRecordFormScreen({ navigation, route }) {
         )}
 
         <Text style={[styles.sectionTitle, { color: themeColors.text }]}>Attachments</Text>
-        {existingRecord?.attachments?.length ? (
-          existingRecord.attachments.map((attachment) => (
+        {attachments.length ? (
+          attachments.map((attachment) => (
             <View key={attachment._id} style={[styles.attachmentRow, { backgroundColor: themeColors.surfaceMuted }]}>
               <View style={styles.attachmentText}>
                 <Text style={[styles.attachmentName, { color: themeColors.text }]}>{attachment.originalName}</Text>
@@ -490,11 +558,34 @@ export default function MedicalRecordFormScreen({ navigation, route }) {
           <EmptyState message="No attachments uploaded for this medical record yet." title="No files" />
         )}
 
+        {pendingAttachments.length ? (
+          <View style={styles.pendingAttachments}>
+            <Text style={[styles.pendingTitle, { color: themeColors.text }]}>Selected from this device</Text>
+            {pendingAttachments.map((file) => (
+              <View
+                key={file.uri}
+                style={[styles.pendingAttachmentRow, { backgroundColor: themeColors.surfaceMuted, borderColor: themeColors.border }]}
+              >
+                <View style={styles.attachmentText}>
+                  <Text style={[styles.attachmentName, { color: themeColors.text }]}>{file.name}</Text>
+                  <Text style={[styles.attachmentMeta, { color: themeColors.textMuted }]}>
+                    {file.mimeType || 'File'} | Uploads when you save
+                  </Text>
+                </View>
+                <AppButton onPress={() => handleRemovePendingAttachment(file.uri)} title="Remove" variant="outline" />
+              </View>
+            ))}
+          </View>
+        ) : null}
+
         {canEditCurrentForm ? (
           <View style={styles.actions}>
-            {existingRecord && canEditCurrentForm ? (
-              <AppButton loading={uploading} onPress={handleUploadAttachment} title="Upload attachment" variant="secondary" />
-            ) : null}
+            <AppButton
+              loading={uploading}
+              onPress={handlePickAttachment}
+              title={existingRecord ? 'Add files from device' : 'Choose files from device'}
+              variant="secondary"
+            />
             {canEditCurrentForm ? <AppButton loading={submitting} onPress={handleSave} title={isDoctorStartMode ? 'Finish appointment' : 'Save medical record'} /> : null}
             {existingRecord && canEditCurrentForm && !isDoctorStartMode ? <AppButton onPress={handleArchive} title="Archive" variant="outline" /> : null}
             {existingRecord && canEditCurrentForm && !isDoctorStartMode ? <AppButton onPress={handleDelete} title="Delete" variant="danger" /> : null}
@@ -577,6 +668,18 @@ const styles = StyleSheet.create({
   },
   attachmentActions: {
     gap: spacing.sm,
+  },
+  pendingAttachments: {
+    gap: spacing.sm,
+    marginTop: spacing.md,
+  },
+  pendingTitle: {
+    fontWeight: '700',
+  },
+  pendingAttachmentRow: {
+    borderRadius: radii.md,
+    borderWidth: 1,
+    padding: spacing.md,
   },
   actions: {
     gap: spacing.md,
