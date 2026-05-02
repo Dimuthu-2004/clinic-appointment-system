@@ -11,8 +11,8 @@ export default function ForgotPasswordScreen({ navigation, route }) {
   const { colors: themeColors } = useTheme();
   const { user, requestPasswordReset, resetPassword } = useAuth();
   const initialEmail = useMemo(
-    () => String(route.params?.email || user?.email || '').trim().toLowerCase(),
-    [route.params?.email, user?.email]
+    () => String(route.params?.email || user?.recoveryEmail || user?.email || '').trim().toLowerCase(),
+    [route.params?.email, user?.recoveryEmail, user?.email]
   );
   const [form, setForm] = useState({
     email: initialEmail,
@@ -25,9 +25,12 @@ export default function ForgotPasswordScreen({ navigation, route }) {
   const [resetting, setResetting] = useState(false);
   const [error, setError] = useState('');
   const normalizedAccountEmail = String(user?.email || '').trim().toLowerCase();
+  const normalizedRecoveryEmail = String(user?.recoveryEmail || '').trim().toLowerCase();
   const normalizedFormEmail = String(form.email || '').trim().toLowerCase();
-  const enteredEmailDiffersFromAccount = Boolean(
-    normalizedAccountEmail && normalizedFormEmail && normalizedAccountEmail !== normalizedFormEmail
+  const enteredEmailDiffersFromSavedValues = Boolean(
+    normalizedFormEmail &&
+      ((normalizedAccountEmail && normalizedFormEmail !== normalizedAccountEmail) ||
+        (normalizedRecoveryEmail && normalizedFormEmail !== normalizedRecoveryEmail))
   );
 
   const handleSendCode = async () => {
@@ -95,35 +98,48 @@ export default function ForgotPasswordScreen({ navigation, route }) {
       <View style={[styles.card, { backgroundColor: themeColors.surface, borderColor: themeColors.border }]}>
         <Text style={[styles.title, { color: themeColors.text }]}>Forgot password</Text>
         <Text style={[styles.subtitle, { color: themeColors.textMuted }]}>
-          Enter the email you usually use for Smart Clinic and we will try to send a 6-digit reset code there.
+          Enter your login email or your saved recovery email. If a recovery email is saved on that account, the 6-digit code will be delivered there.
         </Text>
 
         <AppInput
           autoCapitalize="none"
           keyboardType="email-address"
-          label="Email"
+          label="Login email or recovery email"
           onChangeText={(email) => setForm((current) => ({ ...current, email }))}
-          placeholder="patient@clinic.com"
+          placeholder="patient@clinic.com or you@gmail.com"
           value={form.email}
         />
 
-        {normalizedAccountEmail ? (
+        {normalizedAccountEmail || normalizedRecoveryEmail ? (
           <View style={styles.emailHintBox}>
             <Text style={[styles.emailHint, { color: themeColors.textMuted }]}>
-              Your current Smart Clinic account email is {normalizedAccountEmail}.
+              Login email: {normalizedAccountEmail || 'Not set'}
             </Text>
-            {enteredEmailDiffersFromAccount ? (
+            {normalizedRecoveryEmail ? (
+              <Text style={[styles.emailHint, { color: themeColors.textMuted }]}>
+                Recovery email: {normalizedRecoveryEmail}
+              </Text>
+            ) : null}
+            {enteredEmailDiffersFromSavedValues && normalizedAccountEmail ? (
               <Pressable
                 onPress={() => setForm((current) => ({ ...current, email: normalizedAccountEmail }))}
                 style={styles.useAccountEmailButton}
               >
-                <Text style={styles.link}>Use my account email</Text>
+                <Text style={styles.link}>Use login email</Text>
+              </Pressable>
+            ) : null}
+            {enteredEmailDiffersFromSavedValues && normalizedRecoveryEmail ? (
+              <Pressable
+                onPress={() => setForm((current) => ({ ...current, email: normalizedRecoveryEmail }))}
+                style={styles.useAccountEmailButton}
+              >
+                <Text style={styles.link}>Use recovery email</Text>
               </Pressable>
             ) : null}
           </View>
         ) : (
           <Text style={[styles.emailHint, { color: themeColors.textMuted }]}>
-            Use the exact email saved on the Smart Clinic account you want to recover.
+            Use the login email or saved recovery email of the Smart Clinic account you want to recover.
           </Text>
         )}
 

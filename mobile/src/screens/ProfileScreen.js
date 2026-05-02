@@ -16,6 +16,7 @@ export default function ProfileScreen({ navigation }) {
     firstName: user?.firstName || '',
     lastName: user?.lastName || '',
     email: user?.email || '',
+    recoveryEmail: user?.recoveryEmail || '',
     phone: user?.phone || '',
     address: user?.address || '',
     gender: user?.gender || 'prefer_not_to_say',
@@ -44,6 +45,7 @@ export default function ProfileScreen({ navigation }) {
           {user?.firstName} {user?.lastName}
         </Text>
         <Text style={styles.meta}>{user?.email}</Text>
+        {user?.recoveryEmail ? <Text style={styles.meta}>Recovery: {user.recoveryEmail}</Text> : null}
       </View>
 
       <View style={[styles.formCard, { backgroundColor: themeColors.surface, borderColor: themeColors.border }]}>
@@ -64,6 +66,14 @@ export default function ProfileScreen({ navigation }) {
           label="Email"
           onChangeText={(email) => setForm((current) => ({ ...current, email }))}
           value={form.email}
+        />
+        <AppInput
+          autoCapitalize="none"
+          keyboardType="email-address"
+          label="Recovery email"
+          onChangeText={(recoveryEmail) => setForm((current) => ({ ...current, recoveryEmail }))}
+          placeholder="Real inbox for reset codes"
+          value={form.recoveryEmail}
         />
         <AppInput
           keyboardType="phone-pad"

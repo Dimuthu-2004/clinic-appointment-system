@@ -39,6 +39,7 @@ export default function RegisterScreen({ navigation, route }) {
     firstName: '',
     lastName: '',
     email: '',
+    recoveryEmail: '',
     password: '',
     confirmPassword: '',
     phone: '',
@@ -87,6 +88,10 @@ export default function RegisterScreen({ navigation, route }) {
 
     if (!isValidEmail(form.email)) {
       return 'Please enter a valid email address.';
+    }
+
+    if (form.recoveryEmail && !isValidEmail(form.recoveryEmail)) {
+      return 'Please enter a valid recovery email address.';
     }
 
     if (!isStrongPassword(form.password)) {
@@ -143,6 +148,7 @@ export default function RegisterScreen({ navigation, route }) {
         firstName: form.firstName.trim(),
         lastName: form.lastName.trim(),
         email: form.email.trim().toLowerCase(),
+        recoveryEmail: form.recoveryEmail.trim().toLowerCase(),
         password: form.password,
         phone: form.phone.trim(),
       };
@@ -199,6 +205,14 @@ export default function RegisterScreen({ navigation, route }) {
           onChangeText={(email) => setForm((current) => ({ ...current, email }))}
           placeholder="user@example.com"
           value={form.email}
+        />
+        <AppInput
+          autoCapitalize="none"
+          keyboardType="email-address"
+          label="Recovery email (optional)"
+          onChangeText={(recoveryEmail) => setForm((current) => ({ ...current, recoveryEmail }))}
+          placeholder="Any real inbox for reset codes"
+          value={form.recoveryEmail}
         />
         <AppInput
           label="Password"

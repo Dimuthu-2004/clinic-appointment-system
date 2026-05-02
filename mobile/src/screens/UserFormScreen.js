@@ -24,6 +24,7 @@ export default function UserFormScreen({ navigation, route }) {
     firstName: userRecord?.firstName || '',
     lastName: userRecord?.lastName || '',
     email: userRecord?.email || '',
+    recoveryEmail: userRecord?.recoveryEmail || '',
     password: '',
     role: userRecord?.role || 'patient',
     phone: userRecord?.phone || '',
@@ -148,6 +149,7 @@ export default function UserFormScreen({ navigation, route }) {
               <DetailRow label="First name" value={form.firstName || 'Not set'} />
               <DetailRow label="Last name" value={form.lastName || 'Not set'} />
               <DetailRow label="Email" value={form.email || 'Not set'} />
+              <DetailRow label="Recovery email" value={form.recoveryEmail || 'Not set'} />
               <DetailRow label="Phone" value={form.phone || 'Not set'} />
               <DetailRow label="Address" value={form.address || 'Not set'} />
               {showNic ? <DetailRow label="NIC" value={form.nic || 'Not set'} /> : null}

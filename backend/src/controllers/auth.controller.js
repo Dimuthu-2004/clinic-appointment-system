@@ -6,6 +6,7 @@ const asyncHandler = require('../utils/asyncHandler');
 const { STAFF_ROLE_VALUES, USER_ROLES } = require('../utils/roles');
 const { sendPasswordResetEmail } = require('../utils/email');
 const {
+  normalizeOptionalEmail,
   normalizeOptionalNic,
   normalizeOptionalSlmcRegistrationNumber,
   normalizeSpecialization,
@@ -41,8 +42,13 @@ const clearPasswordResetState = (user) => {
   user.passwordResetExpiresAt = null;
 };
 
-const ensureEmailIsUnique = async (email, excludedUserId = null) => {
-  const query = excludedUserId ? { email, _id: { $ne: excludedUserId } } : { email };
+const buildEmailLookupQuery = (email, excludedUserId = null) => ({
+  $or: [{ email }, { recoveryEmail: email }],
+  ...(excludedUserId ? { _id: { $ne: excludedUserId } } : {}),
+});
+
+const ensurePrimaryEmailIsUnique = async (email, excludedUserId = null) => {
+  const query = buildEmailLookupQuery(email, excludedUserId);
   const existingUser = await User.findOne(query);
 
   if (existingUser) {
@@ -50,9 +56,19 @@ const ensureEmailIsUnique = async (email, excludedUserId = null) => {
   }
 };
 
+const ensureRecoveryEmailIsUnique = async (email, excludedUserId = null) => {
+  const query = buildEmailLookupQuery(email, excludedUserId);
+  const existingUser = await User.findOne(query);
+
+  if (existingUser) {
+    throw new ApiError(409, 'This recovery email is already used by another account');
+  }
+};
+
 const createUserAccount = async (payload) => {
   const email = payload.email.toLowerCase();
-  await ensureEmailIsUnique(email);
+  await ensurePrimaryEmailIsUnique(email);
+  const recoveryEmail = normalizeOptionalEmail(payload.recoveryEmail);
 
   const nic = normalizeOptionalNic(payload.nic);
   const slmcRegistrationNumber = normalizeOptionalSlmcRegistrationNumber(payload.slmcRegistrationNumber);
@@ -62,6 +78,11 @@ const createUserAccount = async (payload) => {
     email,
     specialization: normalizeSpecialization(payload.specialization),
   };
+
+  if (recoveryEmail && recoveryEmail !== email) {
+    await ensureRecoveryEmailIsUnique(recoveryEmail);
+    normalizedPayload.recoveryEmail = recoveryEmail;
+  }
 
   if (nic !== undefined) {
     normalizedPayload.nic = nic;
@@ -136,7 +157,9 @@ const login = asyncHandler(async (req, res) => {
 
 const requestPasswordReset = asyncHandler(async (req, res) => {
   const email = String(req.body.email || '').trim().toLowerCase();
-  const user = await User.findOne({ email }).select('+passwordResetCodeHash +passwordResetExpiresAt');
+  const user = await User.findOne({
+    $or: [{ email }, { recoveryEmail: email }],
+  }).select('+passwordResetCodeHash +passwordResetExpiresAt');
 
   if (!user) {
     if (process.env.NODE_ENV !== 'production') {
@@ -152,20 +175,21 @@ const requestPasswordReset = asyncHandler(async (req, res) => {
 
   const resetCode = buildPasswordResetCode();
   const expiresInMinutes = getPasswordResetExpiryMinutes();
+  const deliveryEmail = String(user.recoveryEmail || user.email || '').trim().toLowerCase();
 
   user.passwordResetCodeHash = hashPasswordResetCode(resetCode);
   user.passwordResetExpiresAt = new Date(Date.now() + expiresInMinutes * 60 * 1000);
   await user.save({ validateBeforeSave: false });
 
   await sendPasswordResetEmail({
-    to: user.email,
+    to: deliveryEmail,
     firstName: user.firstName,
     resetCode,
     expiresInMinutes,
   });
 
   if (process.env.NODE_ENV !== 'production') {
-    console.info(`[auth] Password reset code email sent to: ${user.email}`);
+    console.info(`[auth] Password reset code email sent to: ${deliveryEmail} for account ${user.email}`);
   }
 
   res.status(200).json({
@@ -177,7 +201,7 @@ const requestPasswordReset = asyncHandler(async (req, res) => {
 const resetPassword = asyncHandler(async (req, res) => {
   const email = String(req.body.email || '').trim().toLowerCase();
   const resetCode = String(req.body.resetCode || '').trim();
-  const user = await User.findOne({ email }).select(
+  const user = await User.findOne({ $or: [{ email }, { recoveryEmail: email }] }).select(
     '+password +passwordResetCodeHash +passwordResetExpiresAt'
   );
 
@@ -225,8 +249,20 @@ const updateProfile = asyncHandler(async (req, res) => {
 
   if (req.body.email !== undefined) {
     const normalizedEmail = String(req.body.email || '').trim().toLowerCase();
-    await ensureEmailIsUnique(normalizedEmail, req.user._id);
+    await ensurePrimaryEmailIsUnique(normalizedEmail, req.user._id);
     req.user.email = normalizedEmail;
+  }
+
+  if (req.body.recoveryEmail !== undefined) {
+    const normalizedRecoveryEmail = normalizeOptionalEmail(req.body.recoveryEmail);
+    const nextPrimaryEmail = String(req.user.email || '').trim().toLowerCase();
+
+    if (normalizedRecoveryEmail && normalizedRecoveryEmail !== nextPrimaryEmail) {
+      await ensureRecoveryEmailIsUnique(normalizedRecoveryEmail, req.user._id);
+      req.user.recoveryEmail = normalizedRecoveryEmail;
+    } else {
+      req.user.recoveryEmail = undefined;
+    }
   }
 
   allowedFields.forEach((field) => {
@@ -242,6 +278,10 @@ const updateProfile = asyncHandler(async (req, res) => {
       }
     }
   });
+
+  if (req.user.recoveryEmail && req.user.recoveryEmail === req.user.email) {
+    req.user.recoveryEmail = undefined;
+  }
 
   await req.user.save();
 

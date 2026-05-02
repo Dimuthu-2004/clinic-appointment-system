@@ -28,6 +28,10 @@ const getPasswordChecks = (value) => {
 const isStrongPassword = (value) => Object.values(getPasswordChecks(value)).every(Boolean);
 
 const normalizeNic = (value) => String(value || '').trim().toUpperCase();
+const normalizeOptionalEmail = (value) => {
+  const normalized = String(value || '').trim().toLowerCase();
+  return normalized || undefined;
+};
 const normalizeOptionalNic = (value) => {
   const normalized = normalizeNic(value);
   return normalized || undefined;
@@ -43,6 +47,7 @@ module.exports = {
   PASSWORD_REQUIREMENTS_MESSAGE,
   isStrongPassword,
   isValidSriLankanNic,
+  normalizeOptionalEmail,
   normalizeNic,
   normalizeOptionalNic,
   normalizeSpecialization,

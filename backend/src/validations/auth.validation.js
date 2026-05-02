@@ -10,6 +10,7 @@ const baseValidation = [
   body('firstName').trim().notEmpty().withMessage('First name is required'),
   body('lastName').trim().notEmpty().withMessage('Last name is required'),
   body('email').isEmail().withMessage('A valid email is required'),
+  body('recoveryEmail').optional({ values: 'falsy' }).isEmail().withMessage('Recovery email must be valid'),
   body('password')
     .custom((value) => isStrongPassword(value))
     .withMessage(PASSWORD_REQUIREMENTS_MESSAGE),
@@ -67,6 +68,10 @@ const updateProfileValidation = [
   body('firstName').optional().trim().notEmpty().withMessage('First name cannot be empty'),
   body('lastName').optional().trim().notEmpty().withMessage('Last name cannot be empty'),
   body('email').optional().isEmail().withMessage('A valid email is required'),
+  body('recoveryEmail')
+    .optional({ values: 'falsy' })
+    .isEmail()
+    .withMessage('Recovery email must be valid'),
   body('phone')
     .optional()
     .matches(/^(\+94|0)\d{9}$/)
