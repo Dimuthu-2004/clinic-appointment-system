@@ -38,7 +38,7 @@ export default function ForgotPasswordScreen({ navigation, route }) {
       setCodeRequested(true);
       Alert.alert(
         'Check your email',
-        'A 6-digit reset code has been sent to that Smart Clinic account email.'
+        'If that email matches a Smart Clinic account, a 6-digit reset code will be sent shortly.'
       );
     } catch (requestError) {
       setError(requestError?.response?.data?.message || requestError?.message || 'Unable to send reset code.');
@@ -90,7 +90,7 @@ export default function ForgotPasswordScreen({ navigation, route }) {
       <View style={[styles.card, { backgroundColor: themeColors.surface, borderColor: themeColors.border }]}>
         <Text style={[styles.title, { color: themeColors.text }]}>Forgot password</Text>
         <Text style={[styles.subtitle, { color: themeColors.textMuted }]}>
-          Enter the email address linked to your Smart Clinic account to receive a 6-digit reset code, then choose a new password.
+          Enter the email you usually use for Smart Clinic and we will try to send a 6-digit reset code there.
         </Text>
 
         <AppInput
