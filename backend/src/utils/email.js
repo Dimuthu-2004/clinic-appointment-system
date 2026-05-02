@@ -90,7 +90,41 @@ const sendPasswordResetEmail = async ({ to, firstName, resetCode, expiresInMinut
   });
 };
 
+const sendClinicAlertEmail = async ({ to, firstName, title, message }) => {
+  const name = String(firstName || 'there').trim();
+  const subject = `Smart Clinic alert: ${String(title || 'Clinic update').trim()}`;
+  const text = [
+    `Hello ${name},`,
+    '',
+    String(title || 'Clinic update').trim(),
+    '',
+    String(message || '').trim(),
+    '',
+    'Please open Smart Clinic for more details.',
+  ].join('\n');
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto; color: #10343c;">
+      <h2 style="color: #0f766e;">Smart Clinic alert</h2>
+      <p>Hello ${name},</p>
+      <p style="font-size: 18px; font-weight: 800; color: #0f172a; margin-bottom: 12px;">
+        ${String(title || 'Clinic update').trim()}
+      </p>
+      <p style="line-height: 1.6;">${String(message || '').trim()}</p>
+      <p>Please open Smart Clinic for more details.</p>
+    </div>
+  `;
+
+  await sendEmail({
+    to,
+    subject,
+    text,
+    html,
+  });
+};
+
 module.exports = {
   isEmailServiceConfigured,
+  sendClinicAlertEmail,
   sendPasswordResetEmail,
 };

@@ -4,10 +4,13 @@ const validateRequest = require('../middleware/validate.middleware');
 const {
   alertIdValidation,
   createAlertValidation,
+  previewAlertValidation,
   updateAlertValidation,
 } = require('../validations/alert.validation');
 
 const router = express.Router();
+
+router.post('/preview-targets', previewAlertValidation, validateRequest, alertController.previewAlertTargets);
 
 router
   .route('/')

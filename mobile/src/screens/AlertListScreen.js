@@ -3,6 +3,8 @@ import { Alert, StyleSheet, Text, View } from 'react-native';
 import { useIsFocused } from '@react-navigation/native';
 import api from '../api/client';
 import AppButton from '../components/AppButton';
+import AppInput from '../components/AppInput';
+import AppSelect from '../components/AppSelect';
 import EmptyState from '../components/EmptyState';
 import EntityCard from '../components/EntityCard';
 import LoadingOverlay from '../components/LoadingOverlay';
@@ -18,6 +20,8 @@ export default function AlertListScreen({ navigation }) {
   const isFocused = useIsFocused();
   const [alerts, setAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [sortBy, setSortBy] = useState('newest');
 
   useEffect(() => {
     const loadAlerts = async () => {
@@ -52,6 +56,38 @@ export default function AlertListScreen({ navigation }) {
     return `${minAge ?? 'Any'} - ${maxAge ?? 'Any'}`;
   };
 
+  const filteredAlerts = [...alerts]
+    .filter((alertItem) => {
+      const searchValue = search.trim().toLowerCase();
+
+      if (!searchValue) {
+        return true;
+      }
+
+      return [
+        alertItem.title,
+        alertItem.message,
+        alertItem.status,
+        alertItem.targetCondition,
+        alertItem.sendEmailNotifications ? 'email' : 'in-app',
+      ].some((value) => String(value || '').toLowerCase().includes(searchValue));
+    })
+    .sort((left, right) => {
+      switch (sortBy) {
+        case 'oldest':
+          return new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime();
+        case 'title':
+          return String(left.title || '').localeCompare(String(right.title || ''));
+        case 'recipients':
+          return (right.notificationsSentCount || right.targetedPatients?.length || 0) - (left.notificationsSentCount || left.targetedPatients?.length || 0);
+        case 'status':
+          return String(left.status || '').localeCompare(String(right.status || ''));
+        case 'newest':
+        default:
+          return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
+      }
+    });
+
   return (
     <ScreenContainer>
       <View style={styles.header}>
@@ -66,13 +102,32 @@ export default function AlertListScreen({ navigation }) {
         {canManage ? <AppButton title="New" onPress={() => navigation.navigate('AlertForm')} /> : null}
       </View>
 
-      {alerts.length === 0 ? (
+      <AppInput
+        label="Search alerts"
+        onChangeText={setSearch}
+        placeholder="Search title, message, status, or condition"
+        value={search}
+      />
+      <AppSelect
+        items={[
+          { label: 'Newest first', value: 'newest' },
+          { label: 'Oldest first', value: 'oldest' },
+          { label: 'Title A-Z', value: 'title' },
+          { label: 'Most recipients', value: 'recipients' },
+          { label: 'Status', value: 'status' },
+        ]}
+        label="Sort alerts"
+        onValueChange={setSortBy}
+        value={sortBy}
+      />
+
+      {filteredAlerts.length === 0 ? (
         <EmptyState
-          message={user?.role === 'admin' ? 'No alerts have been created yet.' : 'No clinic alerts are available right now.'}
+          message={search ? 'No alerts matched that search.' : user?.role === 'admin' ? 'No alerts have been created yet.' : 'No clinic alerts are available right now.'}
           title="No alerts found"
         />
       ) : (
-        alerts.map((alertItem) => (
+        filteredAlerts.map((alertItem) => (
           <EntityCard
             key={alertItem._id}
             meta={
@@ -82,6 +137,7 @@ export default function AlertListScreen({ navigation }) {
                     `Recipients: ${alertItem.notificationsSentCount || alertItem.targetedPatients?.length || 0}`,
                     `Age range: ${formatAgeRange(alertItem)}`,
                     `Condition filter: ${alertItem.sendToAll ? 'All users' : alertItem.targetCondition || 'All patients'}`,
+                    `Delivery: ${alertItem.sendEmailNotifications ? 'In-app + email' : 'In-app only'}`,
                     `Created: ${formatDateTime(alertItem.createdAt)}`,
                   ]
                 : [

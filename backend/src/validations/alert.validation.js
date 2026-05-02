@@ -42,10 +42,24 @@ const ageRangeValidation = body().custom((_, { req }) => {
   return true;
 });
 
+const selectedPatientsValidation = body('selectedPatientIds')
+  .optional()
+  .isArray()
+  .withMessage('Selected patient list must be an array');
+
+const selectedPatientsItemValidation = body('selectedPatientIds.*')
+  .optional()
+  .isMongoId()
+  .withMessage('Selected patient id is invalid');
+
 const createAlertValidation = [
   body('title').trim().notEmpty().withMessage('Title is required'),
   body('message').trim().notEmpty().withMessage('Message is required'),
   body('sendToAll').optional().isBoolean().withMessage('Send to all users must be true or false'),
+  body('sendEmailNotifications')
+    .optional()
+    .isBoolean()
+    .withMessage('Email notifications must be true or false'),
   body('minAge').optional({ values: 'falsy' }).isInt({ min: 0 }).withMessage('Minimum age must be 0 or more'),
   body('maxAge').optional({ values: 'falsy' }).isInt({ min: 1, max: 120 }).withMessage('Maximum age must be between 1 and 120'),
   body('targetCondition')
@@ -57,6 +71,20 @@ const createAlertValidation = [
     .optional()
     .isIn(['active', 'archived'])
     .withMessage('Alert status is invalid'),
+  selectedPatientsValidation,
+  selectedPatientsItemValidation,
+  ageRangeValidation,
+];
+
+const previewAlertValidation = [
+  body('sendToAll').optional().isBoolean().withMessage('Send to all users must be true or false'),
+  body('minAge').optional({ values: 'falsy' }).isInt({ min: 0 }).withMessage('Minimum age must be 0 or more'),
+  body('maxAge').optional({ values: 'falsy' }).isInt({ min: 1, max: 120 }).withMessage('Maximum age must be between 1 and 120'),
+  body('targetCondition')
+    .optional()
+    .trim()
+    .isLength({ max: 120 })
+    .withMessage('Target condition must be 120 characters or fewer'),
   ageRangeValidation,
 ];
 
@@ -65,6 +93,10 @@ const updateAlertValidation = [
   body('title').optional().trim().notEmpty().withMessage('Title cannot be empty'),
   body('message').optional().trim().notEmpty().withMessage('Message cannot be empty'),
   body('sendToAll').optional().isBoolean().withMessage('Send to all users must be true or false'),
+  body('sendEmailNotifications')
+    .optional()
+    .isBoolean()
+    .withMessage('Email notifications must be true or false'),
   body('minAge').optional({ values: 'falsy' }).isInt({ min: 0 }).withMessage('Minimum age must be 0 or more'),
   body('maxAge').optional({ values: 'falsy' }).isInt({ min: 1, max: 120 }).withMessage('Maximum age must be between 1 and 120'),
   body('targetCondition')
@@ -76,11 +108,14 @@ const updateAlertValidation = [
     .optional()
     .isIn(['active', 'archived'])
     .withMessage('Alert status is invalid'),
+  selectedPatientsValidation,
+  selectedPatientsItemValidation,
   ageRangeValidation,
 ];
 
 module.exports = {
   alertIdValidation,
   createAlertValidation,
+  previewAlertValidation,
   updateAlertValidation,
 };

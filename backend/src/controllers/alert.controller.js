@@ -4,6 +4,7 @@ const User = require('../models/User');
 const ApiError = require('../utils/ApiError');
 const asyncHandler = require('../utils/asyncHandler');
 const { createNotification, ensurePendingPaymentReminderNotifications } = require('../utils/notifications');
+const { isEmailServiceConfigured, sendClinicAlertEmail } = require('../utils/email');
 
 const populateAlert = [
   { path: 'targetedPatients', select: 'firstName lastName email phone dateOfBirth' },
@@ -67,6 +68,8 @@ const resolveAgeRange = ({ minAge, maxAge, ageLimit }) => {
 };
 
 const normalizeSendToAll = (value) => value === true || value === 'true';
+const normalizeSelectedPatientIds = (value) =>
+  Array.isArray(value) ? [...new Set(value.map((item) => String(item || '').trim()).filter(Boolean))] : [];
 
 const hasTargetingFilters = ({ minAge, maxAge, ageLimit, targetCondition, sendToAll = false }) => {
   if (normalizeSendToAll(sendToAll)) {
@@ -79,20 +82,25 @@ const hasTargetingFilters = ({ minAge, maxAge, ageLimit, targetCondition, sendTo
   return resolvedAgeRange.minAge !== null || resolvedAgeRange.maxAge !== null || Boolean(normalizedCondition);
 };
 
-const getTargetPatientIds = async ({ minAge, maxAge, ageLimit, targetCondition, sendToAll = false }) => {
-  const patients = await User.find({ role: 'patient' }).select('_id dateOfBirth');
+const getTargetPatients = async ({ minAge, maxAge, ageLimit, targetCondition, sendToAll = false }) => {
+  const patients = await User.find({ role: 'patient' }).select(
+    '_id firstName lastName email recoveryEmail phone dateOfBirth'
+  );
 
   if (normalizeSendToAll(sendToAll)) {
-    return patients.map((patient) => String(patient._id));
+    return patients.map((patient) => ({
+      ...patient.toObject(),
+      calculatedAge: calculateAge(patient.dateOfBirth),
+    }));
   }
 
   const resolvedAgeRange = resolveAgeRange({ minAge, maxAge, ageLimit });
 
   let filteredPatientIds = patients.map((patient) => String(patient._id));
+  let filteredPatients = patients;
 
   if (resolvedAgeRange.minAge !== null || resolvedAgeRange.maxAge !== null) {
-    filteredPatientIds = patients
-      .filter((patient) => {
+    filteredPatients = patients.filter((patient) => {
         const age = calculateAge(patient.dateOfBirth);
 
         if (age === null) {
@@ -108,8 +116,8 @@ const getTargetPatientIds = async ({ minAge, maxAge, ageLimit, targetCondition, 
         }
 
         return true;
-      })
-      .map((patient) => String(patient._id));
+      });
+    filteredPatientIds = filteredPatients.map((patient) => String(patient._id));
   }
 
   const normalizedCondition = String(targetCondition || '').trim();
@@ -126,20 +134,57 @@ const getTargetPatientIds = async ({ minAge, maxAge, ageLimit, targetCondition, 
 
     const matchingPatientIds = new Set(matchingRecords.map((record) => String(record.patient)));
     filteredPatientIds = filteredPatientIds.filter((patientId) => matchingPatientIds.has(patientId));
+    filteredPatients = filteredPatients.filter((patient) => matchingPatientIds.has(String(patient._id)));
   }
 
   if (resolvedAgeRange.minAge === null && resolvedAgeRange.maxAge === null && !normalizedCondition) {
     return [];
   }
 
-  return filteredPatientIds;
+  return filteredPatients
+    .filter((patient) => filteredPatientIds.includes(String(patient._id)))
+    .map((patient) => ({
+      ...patient.toObject(),
+      calculatedAge: calculateAge(patient.dateOfBirth),
+    }));
 };
 
-const deliverAlertNotifications = async ({ alert, patientIds }) => {
-  const uniquePatientIds = [...new Set(patientIds.map(String))];
+const getResolvedTargetPatients = async ({
+  minAge,
+  maxAge,
+  ageLimit,
+  targetCondition,
+  sendToAll = false,
+  selectedPatientIds = [],
+}) => {
+  const matchedPatients = await getTargetPatients({
+    minAge,
+    maxAge,
+    ageLimit,
+    targetCondition,
+    sendToAll,
+  });
+
+  const normalizedSelectedPatientIds = normalizeSelectedPatientIds(selectedPatientIds);
+
+  if (normalizeSendToAll(sendToAll) || !normalizedSelectedPatientIds.length) {
+    return matchedPatients;
+  }
+
+  const selectedSet = new Set(normalizedSelectedPatientIds);
+  return matchedPatients.filter((patient) => selectedSet.has(String(patient._id)));
+};
+
+const deliverAlertNotifications = async ({ alert, patients = [] }) => {
+  const uniquePatients = [...new Map(patients.map((patient) => [String(patient._id || patient), patient])).values()];
+
+  if (alert.sendEmailNotifications && !isEmailServiceConfigured()) {
+    throw new ApiError(503, 'Email service is not configured for alert emails. Add SMTP settings first.');
+  }
 
   await Promise.all(
-    uniquePatientIds.map(async (patientId) => {
+    uniquePatients.map(async (patient) => {
+      const patientId = String(patient._id || patient);
       await createNotification({
         recipientId: patientId,
         createdBy: alert.createdBy,
@@ -157,9 +202,61 @@ const deliverAlertNotifications = async ({ alert, patientIds }) => {
           sendToAll: alert.sendToAll,
         },
       });
+
+      if (alert.sendEmailNotifications) {
+        const destinationEmail = String(patient.recoveryEmail || patient.email || '').trim().toLowerCase();
+        if (!destinationEmail) {
+          return;
+        }
+
+        try {
+          await sendClinicAlertEmail({
+            to: destinationEmail,
+            firstName: patient.firstName,
+            title: alert.title,
+            message: alert.message,
+          });
+        } catch (error) {
+          console.warn(`[alert] Email delivery failed for ${destinationEmail}: ${error.message}`);
+        }
+      }
     })
   );
 };
+
+const previewAlertTargets = asyncHandler(async (req, res) => {
+  if (req.user.role !== 'admin') {
+    throw new ApiError(403, 'Only admins can preview alert targets');
+  }
+
+  const sendToAll = normalizeSendToAll(req.body.sendToAll);
+
+  if (
+    !hasTargetingFilters({
+      minAge: req.body.minAge,
+      maxAge: req.body.maxAge,
+      ageLimit: req.body.ageLimit,
+      targetCondition: req.body.targetCondition,
+      sendToAll,
+    })
+  ) {
+    throw new ApiError(422, 'Choose an age limit or target condition before previewing targeted patients.');
+  }
+
+  const matchedPatients = await getResolvedTargetPatients({
+    minAge: sendToAll ? null : req.body.minAge,
+    maxAge: sendToAll ? null : req.body.maxAge,
+    ageLimit: sendToAll ? null : req.body.ageLimit,
+    targetCondition: sendToAll ? '' : req.body.targetCondition,
+    sendToAll,
+  });
+
+  res.status(200).json({
+    success: true,
+    count: matchedPatients.length,
+    data: matchedPatients,
+  });
+});
 
 const createAlert = asyncHandler(async (req, res) => {
   if (req.user.role !== 'admin') {
@@ -180,13 +277,20 @@ const createAlert = asyncHandler(async (req, res) => {
     throw new ApiError(422, 'Choose an age limit or target condition, or select send to all users.');
   }
 
-  const targetedPatientIds = await getTargetPatientIds({
+  const targetedPatients = await getResolvedTargetPatients({
     minAge: sendToAll ? null : req.body.minAge,
     maxAge: sendToAll ? null : req.body.maxAge,
     ageLimit: sendToAll ? null : req.body.ageLimit,
     targetCondition: sendToAll ? '' : req.body.targetCondition,
     sendToAll,
+    selectedPatientIds: sendToAll ? [] : req.body.selectedPatientIds,
   });
+
+  if (!targetedPatients.length) {
+    throw new ApiError(422, 'No patients matched the selected audience. Preview and choose at least one patient.');
+  }
+
+  const targetedPatientIds = targetedPatients.map((patient) => String(patient._id));
 
   const resolvedAgeRange = resolveAgeRange({
     minAge: sendToAll ? null : req.body.minAge,
@@ -202,6 +306,7 @@ const createAlert = asyncHandler(async (req, res) => {
     ageLimit: null,
     targetCondition: sendToAll ? '' : String(req.body.targetCondition || '').trim(),
     sendToAll,
+    sendEmailNotifications: normalizeSendToAll(req.body.sendEmailNotifications),
     status: req.body.status || 'active',
     createdBy: req.user._id,
     targetedPatients: targetedPatientIds,
@@ -211,7 +316,7 @@ const createAlert = asyncHandler(async (req, res) => {
   if (alert.status === 'active' && targetedPatientIds.length) {
     await deliverAlertNotifications({
       alert,
-      patientIds: targetedPatientIds,
+      patients: targetedPatients,
     });
   }
 
@@ -283,7 +388,8 @@ const updateAlert = asyncHandler(async (req, res) => {
     req.body.minAge !== undefined ||
     req.body.maxAge !== undefined ||
     req.body.targetCondition !== undefined ||
-    req.body.sendToAll !== undefined;
+    req.body.sendToAll !== undefined ||
+    req.body.selectedPatientIds !== undefined;
 
   allowedFields.forEach((field) => {
     if (req.body[field] !== undefined) {
@@ -296,6 +402,10 @@ const updateAlert = asyncHandler(async (req, res) => {
 
   if (req.body.sendToAll !== undefined) {
     alert.sendToAll = normalizeSendToAll(req.body.sendToAll);
+  }
+
+  if (req.body.sendEmailNotifications !== undefined) {
+    alert.sendEmailNotifications = normalizeSendToAll(req.body.sendEmailNotifications);
   }
 
   if (targetingChanged) {
@@ -318,16 +428,26 @@ const updateAlert = asyncHandler(async (req, res) => {
     }
 
     alert.ageLimit = null;
-    const targetedPatientIds = await getTargetPatientIds({
+    const targetedPatients = await getResolvedTargetPatients({
       minAge: alert.minAge,
       maxAge: alert.maxAge,
       ageLimit: alert.ageLimit,
       targetCondition: alert.targetCondition,
       sendToAll: alert.sendToAll,
+      selectedPatientIds: alert.sendToAll ? [] : req.body.selectedPatientIds,
     });
+
+    if (!targetedPatients.length) {
+      throw new ApiError(422, 'No patients matched the selected audience. Preview and choose at least one patient.');
+    }
+
+    const targetedPatientIds = targetedPatients.map((patient) => String(patient._id));
 
     const previousPatientIds = new Set((alert.targetedPatients || []).map((patientId) => String(patientId)));
     const newlyAddedPatientIds = targetedPatientIds.filter((patientId) => !previousPatientIds.has(String(patientId)));
+    const newlyAddedPatients = targetedPatients.filter((patient) =>
+      newlyAddedPatientIds.includes(String(patient._id))
+    );
 
     alert.targetedPatients = targetedPatientIds;
     alert.notificationsSentCount = targetedPatientIds.length;
@@ -335,7 +455,7 @@ const updateAlert = asyncHandler(async (req, res) => {
     if (alert.status === 'active' && newlyAddedPatientIds.length) {
       await deliverAlertNotifications({
         alert,
-        patientIds: newlyAddedPatientIds,
+        patients: newlyAddedPatients,
       });
     }
   }
@@ -372,6 +492,7 @@ const deleteAlert = asyncHandler(async (req, res) => {
 
 module.exports = {
   createAlert,
+  previewAlertTargets,
   getAlerts,
   getAlertById,
   updateAlert,

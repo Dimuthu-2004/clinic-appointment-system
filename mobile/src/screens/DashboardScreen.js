@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, ImageBackground, StyleSheet, Text, View } from 'react-native';
+import { Animated, ImageBackground, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useIsFocused } from '@react-navigation/native';
 import api from '../api/client';
 import DashboardTopBar from '../components/DashboardTopBar';
@@ -16,6 +16,7 @@ export default function DashboardScreen({ navigation }) {
   const [stats, setStats] = useState({});
   const [financeBillings, setFinanceBillings] = useState([]);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
+  const [patientAlerts, setPatientAlerts] = useState([]);
   const displayName = `${user?.role === 'doctor' ? 'Dr ' : ''}${user?.firstName || ''} ${user?.lastName || ''}`.trim();
 
   const roleConfig = useMemo(() => {
@@ -111,6 +112,10 @@ export default function DashboardScreen({ navigation }) {
             ? notificationResponse.value.data.data?.unreadCount || 0
             : 0
         );
+        const alertsResponse = responses.find(
+          (response, index) => roleConfig.stats[index]?.key === 'alerts' && response.status === 'fulfilled'
+        );
+        setPatientAlerts((alertsResponse?.value?.data?.data || []).filter((item) => item.status === 'active').slice(0, 3));
       }
     };
 
@@ -137,6 +142,33 @@ export default function DashboardScreen({ navigation }) {
                 : 'Patient dashboard'
         }
       />
+
+      {user?.role === 'patient' && patientAlerts.length ? (
+        <View style={styles.alertStripSection}>
+          <View style={styles.alertStripHeader}>
+            <Text style={[styles.alertStripTitle, { color: colors.text }]}>Clinic alerts</Text>
+            <Pressable onPress={() => navigation.navigate('AlertsTab')}>
+              <Text style={styles.alertStripLink}>View all</Text>
+            </Pressable>
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <View style={styles.alertStripRow}>
+              {patientAlerts.map((alertItem) => (
+                <Pressable
+                  key={alertItem._id}
+                  onPress={() => navigation.navigate('AlertsTab')}
+                  style={styles.alertStripCard}
+                >
+                  <Text style={styles.alertStripCardTitle}>{alertItem.title}</Text>
+                  <Text numberOfLines={3} style={styles.alertStripCardBody}>
+                    {alertItem.message}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          </ScrollView>
+        </View>
+      ) : null}
 
       <ImageBackground
         imageStyle={styles.heroImage}
@@ -297,6 +329,47 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: spacing.md,
     marginBottom: spacing.md,
+  },
+  alertStripSection: {
+    marginBottom: spacing.lg,
+  },
+  alertStripHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  alertStripTitle: {
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  alertStripLink: {
+    color: colors.primary,
+    fontWeight: '700',
+  },
+  alertStripRow: {
+    flexDirection: 'row',
+    gap: spacing.md,
+  },
+  alertStripCard: {
+    width: 270,
+    borderRadius: radii.lg,
+    padding: spacing.md,
+    backgroundColor: '#FFF7ED',
+    borderWidth: 1,
+    borderColor: '#FDBA74',
+    ...shadow,
+  },
+  alertStripCardTitle: {
+    color: '#9A3412',
+    fontSize: 16,
+    fontWeight: '800',
+    marginBottom: spacing.xs,
+  },
+  alertStripCardBody: {
+    color: '#7C2D12',
+    lineHeight: 20,
   },
   financePanel: {
     backgroundColor: '#F8FCFB',

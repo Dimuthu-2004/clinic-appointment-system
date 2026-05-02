@@ -38,6 +38,10 @@ const alertSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    sendEmailNotifications: {
+      type: Boolean,
+      default: false,
+    },
     notificationsSentCount: {
       type: Number,
       default: 0,

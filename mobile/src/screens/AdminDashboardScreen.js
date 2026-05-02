@@ -43,9 +43,12 @@ export default function AdminDashboardScreen({ navigation }) {
   const [recentUsers, setRecentUsers] = useState([]);
   const [doctors, setDoctors] = useState([]);
   const [appointments, setAppointments] = useState([]);
+  const [alerts, setAlerts] = useState([]);
   const [selectedDate, setSelectedDate] = useState(getTodayDateKey());
   const [indicatorMonth, setIndicatorMonth] = useState(getTodayDateKey());
   const [appointmentSearch, setAppointmentSearch] = useState('');
+  const [alertSearch, setAlertSearch] = useState('');
+  const [alertSort, setAlertSort] = useState('newest');
   const [defaultAppointmentFee, setDefaultAppointmentFee] = useState({ amount: 2500, currency: 'LKR' });
   const [selectedFeeDoctorId, setSelectedFeeDoctorId] = useState('');
   const [doctorFee, setDoctorFee] = useState({ amount: '2500', currency: 'LKR' });
@@ -88,6 +91,7 @@ export default function AdminDashboardScreen({ navigation }) {
         setRecentUsers(recentAccounts.slice(0, 5));
         setDoctors(doctorUsers);
         setAppointments(appointmentsResponse.data.data || []);
+        setAlerts(alerts);
         const nextFee = settingsResponse.data.data?.appointmentFee;
         if (nextFee) {
           setDefaultAppointmentFee(nextFee);
@@ -168,6 +172,38 @@ export default function AdminDashboardScreen({ navigation }) {
       .sort((left, right) => left[0].localeCompare(right[0]))
       .map(([dateKey, count]) => ({ dateKey, count }));
   }, [appointments, indicatorMonth]);
+
+  const filteredAlerts = useMemo(
+    () =>
+      [...alerts]
+        .filter((alertItem) => {
+          const search = alertSearch.trim().toLowerCase();
+
+          if (!search) {
+            return true;
+          }
+
+          return [
+            alertItem.title,
+            alertItem.message,
+            alertItem.status,
+            alertItem.targetCondition,
+          ].some((value) => String(value || '').toLowerCase().includes(search));
+        })
+        .sort((left, right) => {
+          switch (alertSort) {
+            case 'oldest':
+              return new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime();
+            case 'title':
+              return String(left.title || '').localeCompare(String(right.title || ''));
+            case 'recipients':
+              return (right.notificationsSentCount || right.targetedPatients?.length || 0) - (left.notificationsSentCount || left.targetedPatients?.length || 0);
+            default:
+              return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
+          }
+        }),
+    [alertSearch, alertSort, alerts]
+  );
 
   const handleFeeDoctorChange = (doctorId) => {
     const doctor = doctors.find((item) => item._id === doctorId);
@@ -417,6 +453,58 @@ export default function AdminDashboardScreen({ navigation }) {
         )}
       </View>
 
+      <Text style={[styles.sectionTitle, { color: themeColors.text }]}>Alerts</Text>
+      <View style={[styles.listCard, { backgroundColor: themeColors.surface, borderColor: themeColors.border, marginBottom: spacing.lg }]}>
+        <View style={styles.alertTools}>
+          <AppInput
+            label="Search alerts"
+            onChangeText={setAlertSearch}
+            placeholder="Search title, message, or condition"
+            value={alertSearch}
+          />
+          <AppSelect
+            items={[
+              { label: 'Newest first', value: 'newest' },
+              { label: 'Oldest first', value: 'oldest' },
+              { label: 'Title A-Z', value: 'title' },
+              { label: 'Most recipients', value: 'recipients' },
+            ]}
+            label="Sort alerts"
+            onValueChange={setAlertSort}
+            value={alertSort}
+          />
+        </View>
+        {filteredAlerts.length === 0 ? (
+          <Text style={[styles.emptyAppointments, { color: themeColors.textMuted }]}>
+            {alertSearch ? 'No alerts matched that search.' : 'No alerts have been created yet.'}
+          </Text>
+        ) : (
+          filteredAlerts.map((alertItem) => (
+            <Pressable
+              key={alertItem._id}
+              onPress={() =>
+                navigation.navigate('AlertsTab', {
+                  screen: 'AlertForm',
+                  params: { alertItem },
+                })
+              }
+              style={[styles.userRow, { borderBottomColor: themeColors.border }]}
+            >
+              <View style={styles.alertRowText}>
+                <Text style={[styles.userName, { color: themeColors.text }]}>{alertItem.title}</Text>
+                <Text style={[styles.userMeta, { color: themeColors.textMuted }]} numberOfLines={2}>
+                  {alertItem.message}
+                </Text>
+                <Text style={[styles.userMeta, { color: themeColors.textMuted }]}>
+                  Recipients: {alertItem.notificationsSentCount || alertItem.targetedPatients?.length || 0} | Delivery: {alertItem.sendEmailNotifications ? 'In-app + email' : 'In-app only'}
+                </Text>
+              </View>
+              <StatusBadge value={alertItem.status} />
+            </Pressable>
+          ))
+        )}
+      </View>
+
       <Text style={[styles.sectionTitle, { color: themeColors.text }]}>Recent users</Text>
       <View style={[styles.listCard, { backgroundColor: themeColors.surface, borderColor: themeColors.border }]}>
         {recentUsers.map((account) => (
@@ -649,6 +737,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     gap: spacing.md,
+  },
+  alertRowText: {
+    flex: 1,
+  },
+  alertTools: {
+    marginBottom: spacing.md,
   },
   userName: {
     color: colors.text,

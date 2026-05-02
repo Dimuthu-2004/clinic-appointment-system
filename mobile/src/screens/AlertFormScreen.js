@@ -1,13 +1,22 @@
-import { useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useMemo, useState } from 'react';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import api, { extractErrorMessage } from '../api/client';
 import AppButton from '../components/AppButton';
 import AppInput from '../components/AppInput';
+import EmptyState from '../components/EmptyState';
 import ScreenContainer from '../components/ScreenContainer';
 import { useAuth } from '../hooks/useAuth';
 import { colors, radii, spacing, useTheme } from '../theme';
 import { formatDateTime } from '../utils/date';
+
+const buildTargetingKey = ({ sendToAll, minAge, maxAge, targetCondition }) =>
+  JSON.stringify({
+    sendToAll: Boolean(sendToAll),
+    minAge: String(minAge || '').trim(),
+    maxAge: String(maxAge || '').trim(),
+    targetCondition: String(targetCondition || '').trim().toLowerCase(),
+  });
 
 export default function AlertFormScreen({ navigation, route }) {
   const { user } = useAuth();
@@ -22,7 +31,31 @@ export default function AlertFormScreen({ navigation, route }) {
       !existingAlert?.targetCondition
     );
   const [submitting, setSubmitting] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
   const [errors, setErrors] = useState({});
+  const [patientSearch, setPatientSearch] = useState('');
+  const [previewPatients, setPreviewPatients] = useState(existingAlert?.targetedPatients || []);
+  const [previewKey, setPreviewKey] = useState(
+    existingAlert && !existingSendToAll
+      ? buildTargetingKey({
+          sendToAll: existingSendToAll,
+          minAge:
+            existingAlert?.minAge === null || existingAlert?.minAge === undefined
+              ? existingAlert?.ageLimit === null || existingAlert?.ageLimit === undefined
+                ? ''
+                : String(existingAlert.ageLimit)
+              : String(existingAlert.minAge),
+          maxAge:
+            existingAlert?.maxAge === null || existingAlert?.maxAge === undefined
+              ? ''
+              : String(existingAlert.maxAge),
+          targetCondition: existingAlert?.targetCondition || '',
+        })
+      : ''
+  );
+  const [selectedPatientIds, setSelectedPatientIds] = useState(
+    existingAlert?.targetedPatients?.map((patient) => String(patient?._id || patient)).filter(Boolean) || []
+  );
   const [form, setForm] = useState({
     title: existingAlert?.title || '',
     message: existingAlert?.message || '',
@@ -35,19 +68,57 @@ export default function AlertFormScreen({ navigation, route }) {
     maxAge: existingAlert?.maxAge === null || existingAlert?.maxAge === undefined ? '' : String(existingAlert.maxAge),
     targetCondition: existingAlert?.targetCondition || '',
     sendToAll: Boolean(existingSendToAll),
+    sendEmailNotifications: Boolean(existingAlert?.sendEmailNotifications),
   });
+
+  const currentTargetingKey = useMemo(
+    () => buildTargetingKey(form),
+    [form]
+  );
+
+  const filteredPreviewPatients = useMemo(() => {
+    const search = patientSearch.trim().toLowerCase();
+
+    if (!search) {
+      return previewPatients;
+    }
+
+    return previewPatients.filter((patient) =>
+      [
+        `${patient.firstName || ''} ${patient.lastName || ''}`,
+        patient.email || '',
+        patient.recoveryEmail || '',
+        patient.phone || '',
+      ].some((value) => String(value).toLowerCase().includes(search))
+    );
+  }, [patientSearch, previewPatients]);
 
   const hasTargetingFilters = () =>
     form.minAge !== '' || form.maxAge !== '' || form.targetCondition.trim().length > 0;
 
-  const handleSave = async () => {
-    const nextErrors = {};
-
-    if (!form.title || !form.message) {
-      Alert.alert('Missing fields', 'Please complete the title and message.');
-      return;
+  const resetPreviewState = ({ clearPatients = false } = {}) => {
+    setPreviewKey('');
+    if (clearPatients) {
+      setPreviewPatients([]);
+      setSelectedPatientIds([]);
+      setPatientSearch('');
     }
+  };
 
+  const updateTargeting = (patch) => {
+    setForm((current) => ({ ...current, ...patch }));
+    resetPreviewState({ clearPatients: true });
+    setErrors((current) => ({
+      ...current,
+      minAge: undefined,
+      maxAge: undefined,
+      targetCondition: undefined,
+      selectedPatients: undefined,
+    }));
+  };
+
+  const validateTargeting = () => {
+    const nextErrors = {};
     const minAge = form.minAge === '' ? null : Number(form.minAge);
     const maxAge = form.maxAge === '' ? null : Number(form.maxAge);
 
@@ -68,6 +139,72 @@ export default function AlertFormScreen({ navigation, route }) {
       nextErrors.targetCondition = 'Add an age limit or target condition, or select Send to all users.';
     }
 
+    if (!form.sendToAll && previewKey !== currentTargetingKey) {
+      nextErrors.selectedPatients = 'Preview the matching patients again before publishing.';
+    }
+
+    if (!form.sendToAll && previewKey === currentTargetingKey && selectedPatientIds.length === 0) {
+      nextErrors.selectedPatients = 'Select at least one patient from the preview list.';
+    }
+
+    return nextErrors;
+  };
+
+  const handlePreview = async () => {
+    const nextErrors = validateTargeting();
+
+    delete nextErrors.selectedPatients;
+
+    if (nextErrors.targetCondition || nextErrors.minAge || nextErrors.maxAge) {
+      setErrors(nextErrors);
+      Alert.alert('Invalid values', 'Please correct the highlighted fields before previewing patients.');
+      return;
+    }
+
+    try {
+      setPreviewing(true);
+      setErrors((current) => ({
+        ...current,
+        selectedPatients: undefined,
+      }));
+      const response = await api.post('/alerts/preview-targets', {
+        minAge: form.minAge === '' ? '' : Number(form.minAge),
+        maxAge: form.maxAge === '' ? '' : Number(form.maxAge),
+        targetCondition: form.targetCondition.trim(),
+        sendToAll: false,
+      });
+      const patients = response.data.data || [];
+      setPreviewPatients(patients);
+      setPreviewKey(currentTargetingKey);
+      setSelectedPatientIds(patients.map((patient) => String(patient._id)));
+      setPatientSearch('');
+      if (!patients.length) {
+        Alert.alert('No matches', 'No patients matched those conditions.');
+      }
+    } catch (error) {
+      Alert.alert('Preview failed', extractErrorMessage(error, 'Unable to preview patients.'));
+    } finally {
+      setPreviewing(false);
+    }
+  };
+
+  const togglePatientSelection = (patientId) => {
+    setSelectedPatientIds((current) =>
+      current.includes(patientId) ? current.filter((item) => item !== patientId) : [...current, patientId]
+    );
+    setErrors((current) => ({
+      ...current,
+      selectedPatients: undefined,
+    }));
+  };
+
+  const handleSave = async () => {
+    if (!form.title.trim() || !form.message.trim()) {
+      Alert.alert('Missing fields', 'Please complete the title and message.');
+      return;
+    }
+
+    const nextErrors = validateTargeting();
     setErrors(nextErrors);
 
     if (Object.keys(nextErrors).length) {
@@ -84,6 +221,8 @@ export default function AlertFormScreen({ navigation, route }) {
         maxAge: form.sendToAll || form.maxAge === '' ? '' : Number(form.maxAge),
         targetCondition: form.sendToAll ? '' : form.targetCondition.trim(),
         sendToAll: form.sendToAll,
+        sendEmailNotifications: form.sendEmailNotifications,
+        selectedPatientIds: form.sendToAll ? [] : selectedPatientIds,
       };
 
       if (existingAlert?._id) {
@@ -120,124 +259,232 @@ export default function AlertFormScreen({ navigation, route }) {
 
   return (
     <ScreenContainer>
-      <View style={[styles.card, { backgroundColor: themeColors.surface, borderColor: themeColors.border }]}>
-        <Text style={[styles.title, { color: themeColors.text }]}>Alert details</Text>
-        <Text style={[styles.subtitle, { color: themeColors.textMuted }]}>Send a clinic alert to all patients or a targeted group.</Text>
+      <ScrollView showsVerticalScrollIndicator={false}>
+        <View style={[styles.card, { backgroundColor: themeColors.surface, borderColor: themeColors.border }]}>
+          <Text style={[styles.title, { color: themeColors.text }]}>Alert details</Text>
+          <Text style={[styles.subtitle, { color: themeColors.textMuted }]}>
+            Send a clinic alert to all patients or a targeted group.
+          </Text>
 
-        {!canEdit ? (
-          <>
-            <Text style={[styles.readonlyText, { color: themeColors.text }]}>Title: {form.title}</Text>
-            <Text style={[styles.readonlyText, { color: themeColors.text }]}>Message: {form.message}</Text>
-            <Text style={[styles.readonlyText, { color: themeColors.text }]}>
-              Audience: {form.sendToAll ? 'All users' : 'Targeted users'}
-            </Text>
-            <Text style={[styles.readonlyText, { color: themeColors.text }]}>
-              Age range: {form.sendToAll ? 'All ages' : form.minAge || form.maxAge ? `${form.minAge || 'Any'} - ${form.maxAge || 'Any'}` : 'All ages'}
-            </Text>
-            <Text style={[styles.readonlyText, { color: themeColors.text }]}>
-              Target condition: {form.sendToAll ? 'All users' : form.targetCondition || 'All patients'}
-            </Text>
-            <Text style={[styles.readonlyText, { color: themeColors.text }]}>
-              Sent: {formatDateTime(existingAlert?.createdAt)}
-            </Text>
-          </>
-        ) : null}
+          {!canEdit ? (
+            <>
+              <Text style={[styles.readonlyText, { color: themeColors.text }]}>Title: {form.title}</Text>
+              <Text style={[styles.readonlyText, { color: themeColors.text }]}>Message: {form.message}</Text>
+              <Text style={[styles.readonlyText, { color: themeColors.text }]}>
+                Audience: {form.sendToAll ? 'All users' : 'Targeted users'}
+              </Text>
+              <Text style={[styles.readonlyText, { color: themeColors.text }]}>
+                Age range: {form.sendToAll ? 'All ages' : form.minAge || form.maxAge ? `${form.minAge || 'Any'} - ${form.maxAge || 'Any'}` : 'All ages'}
+              </Text>
+              <Text style={[styles.readonlyText, { color: themeColors.text }]}>
+                Target condition: {form.sendToAll ? 'All users' : form.targetCondition || 'All patients'}
+              </Text>
+              <Text style={[styles.readonlyText, { color: themeColors.text }]}>
+                Email delivery: {form.sendEmailNotifications ? 'Enabled' : 'In-app only'}
+              </Text>
+              <Text style={[styles.readonlyText, { color: themeColors.text }]}>
+                Sent: {formatDateTime(existingAlert?.createdAt)}
+              </Text>
+            </>
+          ) : null}
 
-        {canEdit ? (
-          <>
-            <AppInput
-              editable={canEdit}
-              label="Title"
-              onChangeText={(title) => setForm((current) => ({ ...current, title }))}
-              value={form.title}
-            />
-            <AppInput
-              editable={canEdit}
-              label="Message"
-              multiline
-              onChangeText={(message) => setForm((current) => ({ ...current, message }))}
-              value={form.message}
-            />
-            <View
-              style={[
-                styles.toggleCard,
-                {
-                  backgroundColor: themeColors.surface,
-                  borderColor: themeColors.border,
-                },
-              ]}
-            >
-              <Pressable
-                accessibilityRole="checkbox"
-                accessibilityState={{ checked: form.sendToAll }}
+          {canEdit ? (
+            <>
+              <AppInput
+                editable={canEdit}
+                label="Title"
+                onChangeText={(title) => setForm((current) => ({ ...current, title }))}
+                value={form.title}
+              />
+              <AppInput
+                editable={canEdit}
+                label="Message"
+                multiline
+                onChangeText={(message) => setForm((current) => ({ ...current, message }))}
+                value={form.message}
+              />
+
+              <ToggleCard
+                checked={form.sendToAll}
+                hint="Check this to publish the alert to every patient. Leave it unchecked to use age limits or a target condition."
                 onPress={() => {
+                  const nextSendToAll = !form.sendToAll;
+                  updateTargeting({
+                    sendToAll: nextSendToAll,
+                    ...(nextSendToAll
+                      ? {
+                          minAge: '',
+                          maxAge: '',
+                          targetCondition: '',
+                        }
+                      : {}),
+                  });
+                }}
+                themeColors={themeColors}
+                title="Send to all users"
+              />
+
+              <ToggleCard
+                checked={form.sendEmailNotifications}
+                hint="If enabled, matching users receive both the in-app alert notification and an email."
+                onPress={() =>
                   setForm((current) => ({
                     ...current,
-                    sendToAll: !current.sendToAll,
-                  }));
-                  setErrors((current) => ({
-                    ...current,
-                    minAge: undefined,
-                    maxAge: undefined,
-                    targetCondition: undefined,
-                  }));
-                }}
-                style={styles.checkboxButton}
-              >
-                <Ionicons
-                  color={form.sendToAll ? themeColors.primary : themeColors.textMuted}
-                  name={form.sendToAll ? 'checkbox-outline' : 'square-outline'}
-                  size={24}
-                />
-              </Pressable>
-              <View style={styles.toggleContent}>
-                <Text style={[styles.toggleTitle, { color: themeColors.text }]}>Send to all users</Text>
-                <Text style={[styles.toggleHint, { color: themeColors.textMuted }]}>
-                  Check this to publish the alert to every patient. Leave it unchecked to use age limits or a target condition.
-                </Text>
-              </View>
-            </View>
-            <AppInput
-              editable={canEdit && !form.sendToAll}
-              error={errors.minAge}
-              keyboardType="numeric"
-              label="Minimum age (optional)"
-              onChangeText={(minAge) => setForm((current) => ({ ...current, minAge }))}
-              placeholder={form.sendToAll ? 'Disabled while sending to all users' : 'Example: 18'}
-              value={form.minAge}
-            />
-            <AppInput
-              editable={canEdit && !form.sendToAll}
-              error={errors.maxAge}
-              keyboardType="numeric"
-              label="Maximum age (optional)"
-              onChangeText={(maxAge) => setForm((current) => ({ ...current, maxAge }))}
-              placeholder={form.sendToAll ? 'Disabled while sending to all users' : 'Example: 65'}
-              value={form.maxAge}
-            />
-            <AppInput
-              editable={canEdit && !form.sendToAll}
-              error={errors.targetCondition}
-              label="Target condition (optional)"
-              onChangeText={(targetCondition) => setForm((current) => ({ ...current, targetCondition }))}
-              placeholder={form.sendToAll ? 'Disabled while sending to all users' : 'Example: diabetes'}
-              value={form.targetCondition}
-            />
-          </>
-        ) : null}
+                    sendEmailNotifications: !current.sendEmailNotifications,
+                  }))
+                }
+                themeColors={themeColors}
+                title="Send email notifications too"
+              />
 
-        {canEdit ? (
-          <View style={styles.actions}>
-            <AppButton
-              loading={submitting}
-              onPress={handleSave}
-              title={existingAlert ? 'Update alert' : 'Publish alert'}
-            />
-            {existingAlert ? <AppButton onPress={handleDelete} title="Delete" variant="danger" /> : null}
-          </View>
-        ) : null}
-      </View>
+              <AppInput
+                editable={canEdit && !form.sendToAll}
+                error={errors.minAge}
+                keyboardType="numeric"
+                label="Minimum age (optional)"
+                onChangeText={(minAge) => updateTargeting({ minAge })}
+                placeholder={form.sendToAll ? 'Disabled while sending to all users' : 'Example: 18'}
+                value={form.minAge}
+              />
+              <AppInput
+                editable={canEdit && !form.sendToAll}
+                error={errors.maxAge}
+                keyboardType="numeric"
+                label="Maximum age (optional)"
+                onChangeText={(maxAge) => updateTargeting({ maxAge })}
+                placeholder={form.sendToAll ? 'Disabled while sending to all users' : 'Example: 65'}
+                value={form.maxAge}
+              />
+              <AppInput
+                editable={canEdit && !form.sendToAll}
+                error={errors.targetCondition}
+                label="Target condition (optional)"
+                onChangeText={(targetCondition) => updateTargeting({ targetCondition })}
+                placeholder={form.sendToAll ? 'Disabled while sending to all users' : 'Example: diabetes'}
+                value={form.targetCondition}
+              />
+
+              {!form.sendToAll ? (
+                <View style={[styles.previewCard, { backgroundColor: themeColors.surfaceMuted, borderColor: themeColors.border }]}>
+                  <View style={styles.previewHeader}>
+                    <View style={styles.previewHeaderText}>
+                      <Text style={[styles.previewTitle, { color: themeColors.text }]}>Preview matching patients</Text>
+                      <Text style={[styles.previewHint, { color: themeColors.textMuted }]}>
+                        Review the matched patients, untick anyone you want to remove, then publish.
+                      </Text>
+                    </View>
+                    <AppButton loading={previewing} onPress={handlePreview} title="Preview patients" variant="secondary" />
+                  </View>
+
+                  {errors.selectedPatients ? (
+                    <Text style={[styles.errorText, { color: themeColors.danger }]}>{errors.selectedPatients}</Text>
+                  ) : null}
+
+                  {previewPatients.length ? (
+                    <>
+                      <View style={styles.selectionSummary}>
+                        <Text style={[styles.selectionText, { color: themeColors.textMuted }]}>
+                          Selected {selectedPatientIds.length} of {previewPatients.length} matching patients
+                        </Text>
+                        <Pressable
+                          onPress={() => setSelectedPatientIds(previewPatients.map((patient) => String(patient._id)))}
+                        >
+                          <Text style={styles.link}>Select all</Text>
+                        </Pressable>
+                      </View>
+                      <AppInput
+                        label="Search matched patients"
+                        onChangeText={setPatientSearch}
+                        placeholder="Type name, email, or phone"
+                        value={patientSearch}
+                      />
+                      {filteredPreviewPatients.map((patient) => {
+                        const patientId = String(patient._id);
+                        const isSelected = selectedPatientIds.includes(patientId);
+                        const ageLabel =
+                          patient.calculatedAge === null || patient.calculatedAge === undefined
+                            ? 'Age not available'
+                            : `${patient.calculatedAge} years`;
+
+                        return (
+                          <Pressable
+                            key={patientId}
+                            onPress={() => togglePatientSelection(patientId)}
+                            style={[styles.patientRow, { borderColor: themeColors.border, backgroundColor: themeColors.surface }]}
+                          >
+                            <Ionicons
+                              color={isSelected ? themeColors.primary : themeColors.textMuted}
+                              name={isSelected ? 'checkbox-outline' : 'square-outline'}
+                              size={22}
+                            />
+                            <View style={styles.patientText}>
+                              <Text style={[styles.patientName, { color: themeColors.text }]}>
+                                {patient.firstName} {patient.lastName}
+                              </Text>
+                              <Text style={[styles.patientMeta, { color: themeColors.textMuted }]}>
+                                {patient.recoveryEmail || patient.email || 'No email'} {patient.phone ? `| ${patient.phone}` : ''}
+                              </Text>
+                              <Text style={[styles.patientMeta, { color: themeColors.textMuted }]}>{ageLabel}</Text>
+                            </View>
+                          </Pressable>
+                        );
+                      })}
+                    </>
+                  ) : (
+                    <EmptyState
+                      message="No preview results yet. Add a target condition or age range, then preview patients."
+                      title="No preview loaded"
+                    />
+                  )}
+                </View>
+              ) : null}
+            </>
+          ) : null}
+
+          {canEdit ? (
+            <View style={styles.actions}>
+              <AppButton
+                loading={submitting}
+                onPress={handleSave}
+                title={existingAlert ? 'Update alert' : 'Publish alert'}
+              />
+              {existingAlert ? <AppButton onPress={handleDelete} title="Delete" variant="danger" /> : null}
+            </View>
+          ) : null}
+        </View>
+      </ScrollView>
     </ScreenContainer>
+  );
+}
+
+function ToggleCard({ checked, title, hint, onPress, themeColors }) {
+  return (
+    <View
+      style={[
+        styles.toggleCard,
+        {
+          backgroundColor: themeColors.surface,
+          borderColor: themeColors.border,
+        },
+      ]}
+    >
+      <Pressable
+        accessibilityRole="checkbox"
+        accessibilityState={{ checked }}
+        onPress={onPress}
+        style={styles.checkboxButton}
+      >
+        <Ionicons
+          color={checked ? themeColors.primary : themeColors.textMuted}
+          name={checked ? 'checkbox-outline' : 'square-outline'}
+          size={24}
+        />
+      </Pressable>
+      <View style={styles.toggleContent}>
+        <Text style={[styles.toggleTitle, { color: themeColors.text }]}>{title}</Text>
+        <Text style={[styles.toggleHint, { color: themeColors.textMuted }]}>{hint}</Text>
+      </View>
+    </View>
   );
 }
 
@@ -287,7 +534,64 @@ const styles = StyleSheet.create({
   toggleHint: {
     lineHeight: 20,
   },
+  previewCard: {
+    borderWidth: 1,
+    borderRadius: radii.md,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  previewHeader: {
+    gap: spacing.md,
+    marginBottom: spacing.md,
+  },
+  previewHeaderText: {
+    gap: spacing.xs,
+  },
+  previewTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+  },
+  previewHint: {
+    lineHeight: 20,
+  },
+  errorText: {
+    marginBottom: spacing.md,
+    fontWeight: '600',
+  },
+  selectionSummary: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  selectionText: {
+    flex: 1,
+  },
+  patientRow: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    alignItems: 'flex-start',
+    borderWidth: 1,
+    borderRadius: radii.md,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  patientText: {
+    flex: 1,
+  },
+  patientName: {
+    fontWeight: '800',
+    marginBottom: spacing.xs,
+  },
+  patientMeta: {
+    lineHeight: 19,
+  },
   actions: {
     gap: spacing.md,
+  },
+  link: {
+    color: colors.primary,
+    fontWeight: '700',
   },
 });
