@@ -81,6 +81,15 @@ const validateClinicalVitals = (vitals) => {
   return nextErrors;
 };
 
+const medicalRecordAttachmentTypes = [
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+];
+
 export default function MedicalRecordFormScreen({ navigation, route }) {
   const { colors: themeColors, isDark } = useTheme();
   const { user } = useAuth();
@@ -297,8 +306,7 @@ export default function MedicalRecordFormScreen({ navigation, route }) {
     try {
       const result = await DocumentPicker.getDocumentAsync({
         copyToCacheDirectory: true,
-        multiple: true,
-        type: '*/*',
+        type: medicalRecordAttachmentTypes,
       });
 
       if (result.canceled || !result.assets?.length) {
@@ -311,7 +319,7 @@ export default function MedicalRecordFormScreen({ navigation, route }) {
         setAttachments(updatedRecord?.attachments || []);
         Alert.alert(
           'Uploaded',
-          result.assets.length > 1 ? 'Attachments uploaded successfully.' : 'Attachment uploaded successfully.'
+          'Attachment uploaded successfully.'
         );
         return;
       }

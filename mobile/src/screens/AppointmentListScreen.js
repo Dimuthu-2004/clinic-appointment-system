@@ -124,13 +124,10 @@ export default function AppointmentListScreen({ navigation }) {
   }, [appointments, isDoctor, selectedDate]);
 
   const openMedicalRecordForm = (appointment, medicalRecord) => {
-    navigation.navigate('RecordsTab', {
-      screen: 'MedicalRecordForm',
-      params: {
-        appointment,
-        medicalRecord: medicalRecord || null,
-        startMode: !medicalRecord,
-      },
+    navigation.navigate('MedicalRecordForm', {
+      appointment,
+      medicalRecord: medicalRecord || null,
+      startMode: !medicalRecord,
     });
   };
 

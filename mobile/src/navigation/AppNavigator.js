@@ -100,6 +100,7 @@ function AppointmentNavigator() {
     <AppointmentStack.Navigator screenOptions={getSharedScreenOptions(colors)}>
       <AppointmentStack.Screen name="AppointmentList" component={AppointmentListScreen} options={{ title: 'Appointments' }} />
       <AppointmentStack.Screen name="AppointmentForm" component={AppointmentFormScreen} options={{ title: 'Appointment Form' }} />
+      <AppointmentStack.Screen name="MedicalRecordForm" component={MedicalRecordFormScreen} options={{ title: 'Medical Record' }} />
     </AppointmentStack.Navigator>
   );
 }
