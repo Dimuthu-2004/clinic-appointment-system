@@ -1,10 +1,12 @@
 const Alert = require('../models/Alert');
+const Appointment = require('../models/Appointment');
 const MedicalRecord = require('../models/MedicalRecord');
 const User = require('../models/User');
 const ApiError = require('../utils/ApiError');
 const asyncHandler = require('../utils/asyncHandler');
 const { createNotification, ensurePendingPaymentReminderNotifications } = require('../utils/notifications');
 const { isEmailServiceConfigured, sendClinicAlertEmail } = require('../utils/email');
+const { hasFuzzyTextMatch, normalizeSearchText } = require('../utils/fuzzyTextMatch');
 
 const populateAlert = [
   { path: 'targetedPatients', select: 'firstName lastName email phone dateOfBirth' },
@@ -96,44 +98,70 @@ const getTargetPatients = async ({ minAge, maxAge, ageLimit, targetCondition, se
 
   const resolvedAgeRange = resolveAgeRange({ minAge, maxAge, ageLimit });
 
-  let filteredPatientIds = patients.map((patient) => String(patient._id));
   let filteredPatients = patients;
 
   if (resolvedAgeRange.minAge !== null || resolvedAgeRange.maxAge !== null) {
     filteredPatients = patients.filter((patient) => {
-        const age = calculateAge(patient.dateOfBirth);
+      const age = calculateAge(patient.dateOfBirth);
 
-        if (age === null) {
-          return false;
-        }
+      if (age === null) {
+        return false;
+      }
 
-        if (resolvedAgeRange.minAge !== null && age < resolvedAgeRange.minAge) {
-          return false;
-        }
+      if (resolvedAgeRange.minAge !== null && age < resolvedAgeRange.minAge) {
+        return false;
+      }
 
-        if (resolvedAgeRange.maxAge !== null && age > resolvedAgeRange.maxAge) {
-          return false;
-        }
+      if (resolvedAgeRange.maxAge !== null && age > resolvedAgeRange.maxAge) {
+        return false;
+      }
 
-        return true;
-      });
-    filteredPatientIds = filteredPatients.map((patient) => String(patient._id));
+      return true;
+    });
   }
 
-  const normalizedCondition = String(targetCondition || '').trim();
+  const normalizedCondition = normalizeSearchText(targetCondition);
 
   if (normalizedCondition) {
-    const matchingRecords = await MedicalRecord.find({
-      $or: [
-        { diagnosis: { $regex: normalizedCondition, $options: 'i' } },
-        { symptoms: { $regex: normalizedCondition, $options: 'i' } },
-        { notes: { $regex: normalizedCondition, $options: 'i' } },
-        { treatmentPlan: { $regex: normalizedCondition, $options: 'i' } },
-      ],
-    }).select('patient');
+    const candidatePatientIds = filteredPatients.map((patient) => patient._id);
 
-    const matchingPatientIds = new Set(matchingRecords.map((record) => String(record.patient)));
-    filteredPatientIds = filteredPatientIds.filter((patientId) => matchingPatientIds.has(patientId));
+    if (!candidatePatientIds.length) {
+      return [];
+    }
+
+    const [matchingRecords, matchingAppointments] = await Promise.all([
+      MedicalRecord.find({ patient: { $in: candidatePatientIds } }).select(
+        'patient diagnosis symptoms notes treatmentPlan'
+      ),
+      Appointment.find({ patient: { $in: candidatePatientIds } }).select(
+        'patient reason patientNotes doctorNotes'
+      ),
+    ]);
+
+    const matchingPatientIds = new Set();
+
+    matchingRecords.forEach((record) => {
+      if (
+        hasFuzzyTextMatch({
+          query: normalizedCondition,
+          texts: [record.diagnosis, record.symptoms, record.notes, record.treatmentPlan],
+        })
+      ) {
+        matchingPatientIds.add(String(record.patient));
+      }
+    });
+
+    matchingAppointments.forEach((appointment) => {
+      if (
+        hasFuzzyTextMatch({
+          query: normalizedCondition,
+          texts: [appointment.reason, appointment.patientNotes, appointment.doctorNotes],
+        })
+      ) {
+        matchingPatientIds.add(String(appointment.patient));
+      }
+    });
+
     filteredPatients = filteredPatients.filter((patient) => matchingPatientIds.has(String(patient._id)));
   }
 
@@ -141,12 +169,10 @@ const getTargetPatients = async ({ minAge, maxAge, ageLimit, targetCondition, se
     return [];
   }
 
-  return filteredPatients
-    .filter((patient) => filteredPatientIds.includes(String(patient._id)))
-    .map((patient) => ({
-      ...patient.toObject(),
-      calculatedAge: calculateAge(patient.dateOfBirth),
-    }));
+  return filteredPatients.map((patient) => ({
+    ...patient.toObject(),
+    calculatedAge: calculateAge(patient.dateOfBirth),
+  }));
 };
 
 const getResolvedTargetPatients = async ({
