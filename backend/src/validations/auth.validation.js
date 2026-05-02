@@ -50,6 +50,19 @@ const loginValidation = [
   body('password').notEmpty().withMessage('Password is required'),
 ];
 
+const requestPasswordResetValidation = [body('email').isEmail().withMessage('A valid email is required')];
+
+const resetPasswordValidation = [
+  body('email').isEmail().withMessage('A valid email is required'),
+  body('resetCode')
+    .trim()
+    .matches(/^\d{6}$/)
+    .withMessage('Reset code must be a valid 6-digit code'),
+  body('password')
+    .custom((value) => isStrongPassword(value))
+    .withMessage(PASSWORD_REQUIREMENTS_MESSAGE),
+];
+
 const updateProfileValidation = [
   body('firstName').optional().trim().notEmpty().withMessage('First name cannot be empty'),
   body('lastName').optional().trim().notEmpty().withMessage('Last name cannot be empty'),
@@ -77,5 +90,7 @@ module.exports = {
   doctorRegisterValidation,
   staffRegisterValidation,
   loginValidation,
+  requestPasswordResetValidation,
+  resetPasswordValidation,
   updateProfileValidation,
 };

@@ -8,6 +8,7 @@ import EntityCard from '../components/EntityCard';
 import LoadingOverlay from '../components/LoadingOverlay';
 import ScreenContainer from '../components/ScreenContainer';
 import { colors, spacing, useTheme } from '../theme';
+import { formatDateTime } from '../utils/date';
 
 const roleOptions = [
   { label: 'All roles', value: '' },
@@ -71,6 +72,7 @@ export default function UserManagementScreen({ navigation }) {
             meta={[
               `Role: ${String(account.role).replace(/_/g, ' ')}`,
               `Phone: ${account.phone || 'Not set'}`,
+              `Last login: ${account.lastLoginAt ? formatDateTime(account.lastLoginAt) : 'Not logged in yet'}`,
               ...(account.role === 'doctor' && account.specialization
                 ? [`Specialization: ${account.specialization}`]
                 : []),

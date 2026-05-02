@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const Appointment = require('../models/Appointment');
 const User = require('../models/User');
 
 const isLocalMongoUri = (uri = '') => /mongodb:\/\/(127\.0\.0\.1|localhost)(:\d+)?\//i.test(uri);
@@ -71,6 +72,45 @@ const ensureUserCollectionState = async () => {
   );
 };
 
+const hasExactKeyPattern = (index = {}, expected = {}) => {
+  const leftEntries = Object.entries(index.key || {});
+  const rightEntries = Object.entries(expected);
+
+  if (leftEntries.length !== rightEntries.length) {
+    return false;
+  }
+
+  return rightEntries.every(([key, value]) => index.key?.[key] === value);
+};
+
+const ensureAppointmentCollectionState = async () => {
+  const collection = Appointment.collection;
+  const indexes = await collection.indexes();
+
+  for (const index of indexes) {
+    if (index.name === '_id_') {
+      continue;
+    }
+
+    // Clean up legacy unique indexes such as { doctor: 1 } that block
+    // creating more than one appointment for the same doctor.
+    if (index.unique && hasExactKeyPattern(index, { doctor: 1 })) {
+      await collection.dropIndex(index.name);
+    }
+  }
+
+  await collection.createIndex(
+    { doctor: 1, appointmentDate: 1, appointmentSession: 1, tokenNumber: 1 },
+    {
+      unique: true,
+      partialFilterExpression: {
+        tokenNumber: { $type: 'number' },
+      },
+      name: 'doctor_1_appointmentDate_1_appointmentSession_1_tokenNumber_1',
+    }
+  );
+};
+
 const connectDatabase = async () => {
   mongoose.set('strictQuery', true);
   const mongoUri = process.env.MONGO_URI;
@@ -80,6 +120,7 @@ const connectDatabase = async () => {
       serverSelectionTimeoutMS: 10000,
     });
     await ensureUserCollectionState();
+    await ensureAppointmentCollectionState();
     console.log('MongoDB connected');
   } catch (error) {
     error.message = `${buildMongoConnectionHelp(mongoUri)} ${error.message}`;

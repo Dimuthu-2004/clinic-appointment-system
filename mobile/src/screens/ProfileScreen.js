@@ -8,7 +8,7 @@ import { useAuth } from '../hooks/useAuth';
 import { colors, radii, spacing, useTheme } from '../theme';
 import { genders } from '../utils/constants';
 
-export default function ProfileScreen() {
+export default function ProfileScreen({ navigation }) {
   const { user, updateProfile, signOut } = useAuth();
   const { colors: themeColors } = useTheme();
   const isDoctor = user?.role === 'doctor';
@@ -104,6 +104,13 @@ export default function ProfileScreen() {
         ) : null}
 
         <AppButton loading={submitting} onPress={handleSave} title="Save profile" />
+        <AppButton
+          onPress={() => {
+            navigation.navigate('ForgotPassword', { email: form.email || user?.email || '' });
+          }}
+          title="Reset password by email"
+          variant="secondary"
+        />
       </View>
 
       <AppButton onPress={signOut} title="Logout" variant="danger" />

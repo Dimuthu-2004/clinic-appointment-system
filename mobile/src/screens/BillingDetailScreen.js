@@ -16,6 +16,15 @@ const financePaymentMethods = [
   { label: 'Card at clinic', value: 'card' },
 ];
 
+const getPersonName = (person, fallback) => {
+  if (!person || typeof person !== 'object') {
+    return fallback;
+  }
+
+  const fullName = `${person.firstName || ''} ${person.lastName || ''}`.trim();
+  return fullName || fallback;
+};
+
 export default function BillingDetailScreen({ navigation, route }) {
   const { colors: themeColors, isDark } = useTheme();
   const { user } = useAuth();
@@ -97,8 +106,8 @@ export default function BillingDetailScreen({ navigation, route }) {
         </Text>
         <StatusBadge value={existingBilling?.status} />
         <DetailRow label="Amount" value={formatCurrency(existingBilling?.amount, existingBilling?.currency)} />
-        <DetailRow label="Patient" value={`${existingBilling?.patient?.firstName || ''} ${existingBilling?.patient?.lastName || ''}`.trim()} />
-        <DetailRow label="Doctor" value={`${existingBilling?.doctor?.firstName || ''} ${existingBilling?.doctor?.lastName || ''}`.trim()} />
+        <DetailRow label="Patient" value={getPersonName(existingBilling?.patient, 'Patient not available')} />
+        <DetailRow label="Doctor" value={getPersonName(existingBilling?.doctor, 'Doctor not available')} />
         <DetailRow
           label="Appointment time"
           value={existingBilling?.appointment?.appointmentDate ? formatDateTime(existingBilling.appointment.appointmentDate) : 'Not linked'}

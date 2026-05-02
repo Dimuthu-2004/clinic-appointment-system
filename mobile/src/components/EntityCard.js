@@ -14,8 +14,8 @@ export default function EntityCard({ title, subtitle, meta = [], status, onPress
         </View>
         {status ? <StatusBadge value={status} /> : null}
       </View>
-      {meta.map((line) => (
-        <Text key={`${title}-${line}`} style={[styles.meta, { color: colors.text }]}>
+      {meta.map((line, index) => (
+        <Text key={`${title}-${index}-${line}`} style={[styles.meta, { color: colors.text }]}>
           {line}
         </Text>
       ))}

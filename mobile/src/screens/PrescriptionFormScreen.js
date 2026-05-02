@@ -161,6 +161,16 @@ export default function PrescriptionFormScreen({ navigation, route }) {
       return;
     }
 
+    const invalidDosage = form.medications.find((medication) => {
+      const dosageValue = Number(medication.dosage);
+      return !Number.isFinite(dosageValue) || dosageValue <= 0;
+    });
+
+    if (invalidDosage) {
+      Alert.alert('Invalid dosage', 'Each dosage must be a positive value greater than 0.');
+      return;
+    }
+
     try {
       setSubmitting(true);
 
@@ -331,7 +341,9 @@ export default function PrescriptionFormScreen({ navigation, route }) {
                   ) : null}
                   <AppInput
                     label="Dosage"
+                    keyboardType="numeric"
                     onChangeText={(value) => updateMedication(index, 'dosage', value)}
+                    placeholder="Example: 1"
                     value={medication.dosage}
                   />
                   <AppInput

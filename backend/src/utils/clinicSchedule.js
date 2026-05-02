@@ -198,6 +198,16 @@ const buildAppointmentDate = (dateInput, session) => {
   return new Date(`${normalizedDateKey}T${sessionConfig.startTime}:00${CLINIC_TIMEZONE_OFFSET}`);
 };
 
+const hasClinicSessionStarted = (dateInput, session) => {
+  const sessionStartDate = buildAppointmentDate(dateInput, session);
+
+  if (!sessionStartDate) {
+    return false;
+  }
+
+  return sessionStartDate.getTime() <= Date.now();
+};
+
 const inferAppointmentSession = (appointmentDate) => {
   const normalizedDateKey = normalizeDateKey(appointmentDate);
 
@@ -303,6 +313,7 @@ module.exports = {
   getClinicSessionsForDate,
   getDayBucket,
   getTodayDateKey,
+  hasClinicSessionStarted,
   inferAppointmentSession,
   isClinicSessionAvailableForDate,
   isPastDateKey,

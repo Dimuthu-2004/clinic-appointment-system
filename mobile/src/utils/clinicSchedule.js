@@ -107,6 +107,27 @@ export const getClinicSessionsForDate = (dateInput) => {
   return (runtimeClinicHours.find((item) => item.key === dayBucket)?.sessions || []).filter((session) => session.isOpen !== false);
 };
 
+export const getClinicSessionStartDate = (dateInput, session) => {
+  const dateKey = toDateKey(dateInput);
+  const sessionConfig = getClinicSessionsForDate(dateKey).find((item) => item.value === session);
+
+  if (!dateKey || !sessionConfig) {
+    return null;
+  }
+
+  return new Date(`${dateKey}T${sessionConfig.startTime}:00${CLINIC_TIMEZONE_OFFSET}`);
+};
+
+export const hasClinicSessionStarted = (dateInput, session) => {
+  const sessionStartDate = getClinicSessionStartDate(dateInput, session);
+
+  if (!sessionStartDate) {
+    return false;
+  }
+
+  return sessionStartDate.getTime() <= Date.now();
+};
+
 export const buildAppointmentDateForSession = (dateInput, session) => {
   const dateKey = toDateKey(dateInput);
   const sessionConfig = getClinicSessionsForDate(dateKey).find((item) => item.value === session);

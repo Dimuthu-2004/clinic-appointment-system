@@ -7,6 +7,7 @@ import DateTimeField from './DateTimeField';
 import { colors, radii, shadow, spacing, useTheme } from '../theme';
 import {
   availabilityScopeOptions,
+  hasClinicSessionStarted,
   getClinicSessionsForDate,
   getClinicHours,
   formatAvailabilityScope,
@@ -33,12 +34,20 @@ export default function DoctorAvailabilityCard({ active }) {
     [items]
   );
   const dateScopedAvailabilityOptions = useMemo(() => {
-    const sessionOptions = getClinicSessionsForDate(form.date).map((session) => ({
+    const isToday = form.date === getTodayDateKey();
+    const sessionOptions = getClinicSessionsForDate(form.date)
+      .filter((session) => !isToday || !hasClinicSessionStarted(form.date, session.value))
+      .map((session) => ({
       label: `${session.label} (${session.timeRange})`,
       value: session.value,
     }));
 
-    return [...sessionOptions, availabilityScopeOptions.find((item) => item.value === 'full_day')].filter(Boolean);
+    const canUseFullDay = !isToday || sessionOptions.length === getClinicSessionsForDate(form.date).length;
+
+    return [
+      ...sessionOptions,
+      canUseFullDay ? availabilityScopeOptions.find((item) => item.value === 'full_day') : null,
+    ].filter(Boolean);
   }, [form.date]);
 
   useEffect(() => {
@@ -112,12 +121,18 @@ export default function DoctorAvailabilityCard({ active }) {
               onChange={(date) => setForm((current) => ({ ...current, date }))}
               value={form.date}
             />
-            <AppSelect
-              items={dateScopedAvailabilityOptions}
-              label="Session"
-              onValueChange={(sessionScope) => setForm((current) => ({ ...current, sessionScope }))}
-              value={form.sessionScope}
-            />
+            {dateScopedAvailabilityOptions.length ? (
+              <AppSelect
+                items={dateScopedAvailabilityOptions}
+                label="Session"
+                onValueChange={(sessionScope) => setForm((current) => ({ ...current, sessionScope }))}
+                value={form.sessionScope}
+              />
+            ) : (
+              <Text style={[styles.emptyText, { color: themeColors.textMuted }]}>
+                No upcoming clinic sessions remain for the selected date.
+              </Text>
+            )}
             <View
               style={[
                 styles.switchRow,
@@ -155,7 +170,12 @@ export default function DoctorAvailabilityCard({ active }) {
               </View>
             </View>
 
-            <AppButton loading={saving} onPress={handleSave} title="Save availability" />
+            <AppButton
+              disabled={!dateScopedAvailabilityOptions.length}
+              loading={saving}
+              onPress={handleSave}
+              title="Save availability"
+            />
           </View>
 
           <View style={[styles.scheduleBlock, { borderTopColor: themeColors.border }]}>

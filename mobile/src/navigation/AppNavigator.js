@@ -9,6 +9,7 @@ import { useAuth } from '../hooks/useAuth';
 import SplashScreen from '../screens/SplashScreen';
 import LandingScreen from '../screens/LandingScreen';
 import LoginScreen from '../screens/LoginScreen';
+import ForgotPasswordScreen from '../screens/ForgotPasswordScreen';
 import RegisterScreen from '../screens/RegisterScreen';
 import DashboardScreen from '../screens/DashboardScreen';
 import AdminDashboardScreen from '../screens/AdminDashboardScreen';
@@ -20,6 +21,7 @@ import BillingDetailScreen from '../screens/BillingDetailScreen';
 import MedicalRecordListScreen from '../screens/MedicalRecordListScreen';
 import MedicalRecordFormScreen from '../screens/MedicalRecordFormScreen';
 import MedicalHistoryScreen from '../screens/MedicalHistoryScreen';
+import PatientMedicalRecordScreen from '../screens/PatientMedicalRecordScreen';
 import PrescriptionListScreen from '../screens/PrescriptionListScreen';
 import PrescriptionFormScreen from '../screens/PrescriptionFormScreen';
 import AlertListScreen from '../screens/AlertListScreen';
@@ -58,6 +60,7 @@ function AuthNavigator() {
       <AuthStack.Screen name="Landing" component={LandingScreen} />
       <AuthStack.Screen name="AppointmentForm" component={AppointmentFormScreen} />
       <AuthStack.Screen name="Login" component={LoginScreen} />
+      <AuthStack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
       <AuthStack.Screen name="Register" component={RegisterScreen} />
     </AuthStack.Navigator>
   );
@@ -75,6 +78,7 @@ function HomeNavigator() {
       <HomeStack.Screen name="BillingList" component={BillingListScreen} options={{ title: 'Billing' }} />
       <HomeStack.Screen name="BillingDetail" component={BillingDetailScreen} options={{ title: 'Billing Details' }} />
       <HomeStack.Screen name="Profile" component={ProfileScreen} options={{ title: 'Profile' }} />
+      <HomeStack.Screen name="ForgotPassword" component={ForgotPasswordScreen} options={{ title: 'Forgot Password' }} />
       <HomeStack.Screen name="PrescriptionList" component={PrescriptionListScreen} options={{ title: 'Prescriptions' }} />
       <HomeStack.Screen name="PrescriptionForm" component={PrescriptionFormScreen} options={{ title: 'Prescription Form' }} />
       <HomeStack.Screen name="ReviewList" component={ReviewListScreen} options={{ title: 'Feedback' }} />
@@ -108,6 +112,7 @@ function RecordNavigator() {
       <RecordStack.Screen name="MedicalRecordList" component={MedicalRecordListScreen} options={{ title: 'Medical Records' }} />
       <RecordStack.Screen name="MedicalRecordForm" component={MedicalRecordFormScreen} options={{ title: 'Medical Record Form' }} />
       <RecordStack.Screen name="MedicalHistory" component={MedicalHistoryScreen} options={{ title: 'Medical History' }} />
+      <RecordStack.Screen name="PatientMedicalRecord" component={PatientMedicalRecordScreen} options={{ title: 'Record Details' }} />
     </RecordStack.Navigator>
   );
 }

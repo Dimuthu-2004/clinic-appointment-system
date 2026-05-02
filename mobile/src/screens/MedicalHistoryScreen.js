@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Alert, Animated, StyleSheet, Text, View } from 'react-native';
+import { Alert, Animated, ScrollView, StyleSheet, Text, View } from 'react-native';
 import api from '../api/client';
 import EmptyState from '../components/EmptyState';
 import LoadingOverlay from '../components/LoadingOverlay';
@@ -90,11 +90,13 @@ export default function MedicalHistoryScreen({ route }) {
 
       <Section title="Visit summary">
         {history.visitSummary?.length ? (
-          <SimpleBarChart
+          <VisitTimeline
             items={history.visitSummary.map((item, index) => ({
+              step: index + 1,
               label: formatDateOnly(item.date),
-              value: index + 1,
-              footer: `Token ${item.tokenNumber || '-'}`,
+              tokenLabel: `Token ${item.tokenNumber || '-'}`,
+              session: item.session || 'Session not set',
+              status: item.status || 'scheduled',
             }))}
           />
         ) : (
@@ -164,22 +166,52 @@ function Section({ title, children }) {
   );
 }
 
-function SimpleBarChart({ items }) {
-  const { colors: themeColors } = useTheme();
-  const maxValue = Math.max(...items.map((item) => item.value), 1);
+function VisitTimeline({ items }) {
+  const { colors: themeColors, isDark } = useTheme();
 
   return (
     <View style={[styles.chartCard, { backgroundColor: themeColors.surface, borderColor: themeColors.border }]}>
-      {items.map((item, index) => (
-        <AnimatedBar
-          key={`${item.label}-${index}`}
-          color={themeColors.primary}
-          footer={item.footer}
-          label={item.label}
-          maxValue={maxValue}
-          value={item.value}
-        />
-      ))}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+        <View style={styles.timelineRow}>
+          {items.map((item, index) => (
+            <View key={`${item.label}-${item.step}`} style={styles.timelineNode}>
+              <View style={styles.timelineTrackRow}>
+                <View
+                  style={[
+                    styles.timelineTrack,
+                    { backgroundColor: index === 0 ? 'transparent' : themeColors.primary },
+                  ]}
+                />
+                <View style={[styles.timelineDot, { backgroundColor: themeColors.primaryDark }]}>
+                  <Text style={styles.timelineDotLabel}>{item.step}</Text>
+                </View>
+                <View
+                  style={[
+                    styles.timelineTrack,
+                    { backgroundColor: index === items.length - 1 ? 'transparent' : themeColors.primary },
+                  ]}
+                />
+              </View>
+              <View
+                style={[
+                  styles.timelineCard,
+                  {
+                    backgroundColor: isDark ? themeColors.surfaceMuted : '#F8FBFC',
+                    borderColor: themeColors.border,
+                  },
+                ]}
+              >
+                <Text style={[styles.timelineDate, { color: themeColors.text }]}>{item.label}</Text>
+                <Text style={[styles.timelineToken, { color: themeColors.primaryDark }]}>{item.tokenLabel}</Text>
+                <Text style={[styles.timelineMeta, { color: themeColors.textMuted }]}>{item.session}</Text>
+                <Text style={[styles.timelineMeta, { color: themeColors.textMuted }]}>
+                  Status: {String(item.status).replace(/_/g, ' ')}
+                </Text>
+              </View>
+            </View>
+          ))}
+        </View>
+      </ScrollView>
     </View>
   );
 }
@@ -319,6 +351,57 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontWeight: '800',
     marginBottom: spacing.sm,
+  },
+  timelineRow: {
+    flexDirection: 'row',
+    gap: spacing.md,
+  },
+  timelineNode: {
+    width: 184,
+  },
+  timelineTrackRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  timelineTrack: {
+    flex: 1,
+    height: 2,
+    borderRadius: 999,
+  },
+  timelineDot: {
+    width: 24,
+    height: 24,
+    borderRadius: 999,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginHorizontal: 6,
+  },
+  timelineDotLabel: {
+    color: colors.surface,
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  timelineCard: {
+    borderRadius: radii.md,
+    borderWidth: 1,
+    padding: spacing.md,
+    minHeight: 112,
+  },
+  timelineDate: {
+    color: colors.text,
+    fontWeight: '800',
+    marginBottom: spacing.xs,
+  },
+  timelineToken: {
+    color: colors.primaryDark,
+    fontSize: 18,
+    fontWeight: '900',
+    marginBottom: spacing.xs,
+  },
+  timelineMeta: {
+    color: colors.textMuted,
+    lineHeight: 19,
   },
   barRow: {
     marginBottom: spacing.md,

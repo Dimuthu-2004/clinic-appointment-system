@@ -16,6 +16,7 @@ export default function MedicalRecordListScreen({ navigation }) {
   const { colors: themeColors } = useTheme();
   const isFocused = useIsFocused();
   const isDoctor = user?.role === 'doctor';
+  const isPatient = user?.role === 'patient';
   const [records, setRecords] = useState([]);
   const [patients, setPatients] = useState([]);
   const [search, setSearch] = useState('');
@@ -62,7 +63,9 @@ export default function MedicalRecordListScreen({ navigation }) {
           <Text style={[styles.subtitle, { color: themeColors.textMuted }]}>
             {isDoctor
               ? 'Search patients you have seen before and open their previous notes, diagnoses, and clinical vitals.'
-              : 'View clinical notes, treatment plans, and uploaded record attachments.'}
+              : isPatient
+                ? 'View your diagnosis summaries, treatment plans, clinical vitals, and uploaded attachments.'
+                : 'View and manage clinical notes, treatment plans, and uploaded record attachments.'}
           </Text>
         </View>
       </View>
@@ -112,14 +115,27 @@ export default function MedicalRecordListScreen({ navigation }) {
         records.map((record) => (
           <EntityCard
             key={record._id}
-            meta={[
-              `Patient: ${record.patient?.firstName} ${record.patient?.lastName}`,
-              `Doctor: ${record.doctor?.firstName} ${record.doctor?.lastName}`,
-              `Attachments: ${record.attachments?.length || 0}`,
-            ]}
-            onPress={() => navigation.navigate('MedicalRecordForm', { medicalRecord: record })}
+            meta={
+              isPatient
+                ? [
+                    `Doctor: ${record.doctor?.firstName} ${record.doctor?.lastName}`,
+                    `Visit date: ${record.appointment?.appointmentDate ? formatDateOnly(record.appointment.appointmentDate) : formatDateOnly(record.createdAt)}`,
+                    `Attachments: ${record.attachments?.length || 0}`,
+                  ]
+                : [
+                    `Patient: ${record.patient?.firstName} ${record.patient?.lastName}`,
+                    `Doctor: ${record.doctor?.firstName} ${record.doctor?.lastName}`,
+                    `Attachments: ${record.attachments?.length || 0}`,
+                  ]
+            }
+            onPress={() =>
+              navigation.navigate(
+                isPatient ? 'PatientMedicalRecord' : 'MedicalRecordForm',
+                { medicalRecord: record }
+              )
+            }
             status={record.isArchived ? 'archived' : 'active'}
-            subtitle={record.diagnosis}
+            subtitle={isPatient ? record.doctor?.specialization || record.diagnosis : record.diagnosis}
             title={record.diagnosis}
           />
         ))

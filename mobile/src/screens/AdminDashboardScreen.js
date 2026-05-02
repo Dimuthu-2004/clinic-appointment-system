@@ -67,7 +67,13 @@ export default function AdminDashboardScreen({ navigation }) {
           activeAlerts: alerts.filter((item) => item.status === 'active').length,
         });
 
-        setRecentUsers(users.slice(0, 5));
+        const recentAccounts = [...users].sort((left, right) => {
+          const leftTime = new Date(left.lastLoginAt || left.createdAt || 0).getTime();
+          const rightTime = new Date(right.lastLoginAt || right.createdAt || 0).getTime();
+          return rightTime - leftTime;
+        });
+
+        setRecentUsers(recentAccounts.slice(0, 5));
         setDoctors(doctorUsers);
         setAppointments(appointmentsResponse.data.data || []);
         const nextFee = settingsResponse.data.data?.appointmentFee;
@@ -307,6 +313,9 @@ export default function AdminDashboardScreen({ navigation }) {
                 {account.firstName} {account.lastName}
               </Text>
               <Text style={[styles.userMeta, { color: themeColors.textMuted }]}>{account.email}</Text>
+              <Text style={[styles.userMeta, { color: themeColors.textMuted }]}>
+                Last login: {account.lastLoginAt ? formatDateTime(account.lastLoginAt) : 'Not logged in yet'}
+              </Text>
             </View>
             <Text style={[styles.userRole, { color: themeColors.primaryDark }]}>{String(account.role).replace(/_/g, ' ')}</Text>
           </Pressable>

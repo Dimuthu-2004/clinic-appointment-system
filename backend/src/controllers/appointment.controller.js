@@ -3,6 +3,7 @@ const User = require('../models/User');
 const Billing = require('../models/Billing');
 const ApiError = require('../utils/ApiError');
 const asyncHandler = require('../utils/asyncHandler');
+const { resolveDoctorAvailabilityQuestion } = require('../utils/availabilityQuery');
 const { ensureResourceAccess } = require('../utils/access');
 const {
   buildAppointmentDate,
@@ -24,12 +25,13 @@ const populateAppointment = [
   { path: 'doctor', select: 'firstName lastName email specialization' },
 ];
 
+const PATIENT_CANCELLATION_NOTICE_MS = 6 * 60 * 60 * 1000;
+
 const getNextTokenNumber = async ({ doctorId, appointmentDate, appointmentSession, excludedAppointmentId = null }) => {
   const filter = {
     doctor: doctorId,
     appointmentDate,
     appointmentSession,
-    status: { $ne: 'cancelled' },
   };
 
   if (excludedAppointmentId) {
@@ -88,15 +90,35 @@ const prepareAppointmentSchedule = async ({ doctorId, appointmentDate, appointme
   };
 };
 
-const ensurePatientLeadTime = (appointmentDate) => {
+const ensureAppointmentCanStillBeScheduled = (appointmentDate) => {
   if (!appointmentDate) {
     throw new ApiError(422, 'A valid appointment date is required');
   }
 
   const leadTimeMs = new Date(appointmentDate).getTime() - Date.now();
 
-  if (leadTimeMs < 24 * 60 * 60 * 1000) {
-    throw new ApiError(422, 'Appointments must be booked at least 24 hours before the selected session');
+  if (leadTimeMs < 0) {
+    throw new ApiError(422, 'Appointments must be scheduled for a future clinic session');
+  }
+};
+
+const ensurePatientCanCancelAppointment = (appointment) => {
+  if (!appointment?.appointmentDate) {
+    throw new ApiError(422, 'A valid appointment date is required');
+  }
+
+  if (appointment.status === 'completed') {
+    throw new ApiError(422, 'Completed appointments cannot be cancelled');
+  }
+
+  if (appointment.status === 'cancelled') {
+    throw new ApiError(422, 'This appointment is already cancelled');
+  }
+
+  const remainingMs = new Date(appointment.appointmentDate).getTime() - Date.now();
+
+  if (remainingMs < PATIENT_CANCELLATION_NOTICE_MS) {
+    throw new ApiError(422, 'Appointments must be cancelled at least 6 hours before the scheduled time');
   }
 };
 
@@ -118,10 +140,7 @@ const createAppointment = asyncHandler(async (req, res) => {
     appointmentDate: appointmentSchedule.appointmentDate,
     appointmentSession: appointmentSchedule.appointmentSession,
   });
-
-  if (req.user.role === 'patient') {
-    ensurePatientLeadTime(appointmentSchedule.appointmentDate);
-  }
+  ensureAppointmentCanStillBeScheduled(appointmentSchedule.appointmentDate);
 
   const appointment = await Appointment.create({
     ...req.body,
@@ -205,7 +224,7 @@ const searchAvailableDoctors = asyncHandler(async (req, res) => {
     throw new ApiError(422, 'Please choose a valid clinic date and session');
   }
 
-  ensurePatientLeadTime(appointmentDate);
+  ensureAppointmentCanStillBeScheduled(appointmentDate);
 
   const filter = {
     role: 'doctor',
@@ -282,7 +301,7 @@ const getBookingPreview = asyncHandler(async (req, res) => {
     throw new ApiError(422, 'Please choose a valid clinic date and session');
   }
 
-  ensurePatientLeadTime(appointmentDate);
+  ensureAppointmentCanStillBeScheduled(appointmentDate);
 
   const isAvailable = await isDoctorSessionAvailable({
     doctorId: doctor._id,
@@ -341,6 +360,15 @@ const listDoctorDirectory = asyncHandler(async (req, res) => {
   });
 });
 
+const answerAvailabilityQuestion = asyncHandler(async (req, res) => {
+  const result = await resolveDoctorAvailabilityQuestion(req.query.message);
+
+  res.status(200).json({
+    success: true,
+    data: result,
+  });
+});
+
 const getAppointmentById = asyncHandler(async (req, res) => {
   const appointment = await Appointment.findById(req.params.id).populate(populateAppointment);
 
@@ -380,6 +408,9 @@ const updateAppointment = asyncHandler(async (req, res) => {
     if (req.body.status && req.body.status !== 'cancelled') {
       throw new ApiError(403, 'Patients can only cancel their appointments');
     }
+    if (req.body.status === 'cancelled' && (req.body.appointmentDate !== undefined || req.body.appointmentSession !== undefined)) {
+      throw new ApiError(403, 'Cancellation requests cannot change the appointment schedule');
+    }
   }
 
   if (req.user.role === 'doctor') {
@@ -389,6 +420,10 @@ const updateAppointment = asyncHandler(async (req, res) => {
   const previousDoctorId = String(appointment.doctor);
   const previousAppointmentTime = appointment.appointmentDate.getTime();
   const previousSession = appointment.appointmentSession;
+
+  if (req.user.role === 'patient' && req.body.status === 'cancelled') {
+    ensurePatientCanCancelAppointment(appointment);
+  }
 
   allowedFields.forEach((field) => {
     if (req.body[field] !== undefined) {
@@ -409,10 +444,7 @@ const updateAppointment = asyncHandler(async (req, res) => {
       appointmentDate: appointment.appointmentDate,
       appointmentSession: appointment.appointmentSession,
     });
-
-    if (req.user.role === 'patient') {
-      ensurePatientLeadTime(appointmentSchedule.appointmentDate);
-    }
+    ensureAppointmentCanStillBeScheduled(appointmentSchedule.appointmentDate);
 
     const scheduleChanged =
       previousAppointmentTime !== appointmentSchedule.appointmentDate.getTime() ||
@@ -466,6 +498,19 @@ const deleteAppointment = asyncHandler(async (req, res) => {
     throw new ApiError(403, 'You do not have access to delete this appointment');
   }
 
+  if (req.user.role === 'patient') {
+    throw new ApiError(403, 'Patients cannot delete appointments. Please cancel at least 6 hours before the scheduled time instead.');
+  }
+
+  const linkedBillingExists = await Billing.exists({ appointment: appointment._id });
+
+  if (linkedBillingExists) {
+    throw new ApiError(
+      422,
+      'This appointment already has a billing record. Cancel it instead of deleting so payment history stays intact.'
+    );
+  }
+
   await appointment.deleteOne();
 
   res.status(200).json({
@@ -479,6 +524,7 @@ module.exports = {
   getBookingPreview,
   getAppointments,
   getAppointmentById,
+  answerAvailabilityQuestion,
   listDoctorDirectory,
   searchAvailableDoctors,
   updateAppointment,

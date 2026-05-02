@@ -90,6 +90,20 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    passwordResetCodeHash: {
+      type: String,
+      select: false,
+      default: '',
+    },
+    passwordResetExpiresAt: {
+      type: Date,
+      select: false,
+      default: null,
+    },
+    lastLoginAt: {
+      type: Date,
+      default: null,
+    },
     pushTokens: [
       {
         token: {
@@ -119,6 +133,8 @@ const userSchema = new mongoose.Schema(
     toJSON: {
       transform: (_doc, ret) => {
         delete ret.password;
+        delete ret.passwordResetCodeHash;
+        delete ret.passwordResetExpiresAt;
         delete ret.__v;
         return ret;
       },

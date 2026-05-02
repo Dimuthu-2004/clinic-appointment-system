@@ -3,6 +3,7 @@ const appointmentController = require('../controllers/appointment.controller');
 const { protect } = require('../middleware/auth.middleware');
 const validateRequest = require('../middleware/validate.middleware');
 const {
+  availabilityQuestionValidation,
   availableDoctorsValidation,
   appointmentIdValidation,
   bookingPreviewValidation,
@@ -14,6 +15,13 @@ const {
 const router = express.Router();
 
 router.get('/doctor-directory', appointmentController.listDoctorDirectory);
+
+router.get(
+  '/availability-question',
+  availabilityQuestionValidation,
+  validateRequest,
+  appointmentController.answerAvailabilityQuestion
+);
 
 router.get(
   '/available-doctors',

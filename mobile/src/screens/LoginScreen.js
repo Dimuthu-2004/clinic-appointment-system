@@ -68,6 +68,11 @@ export default function LoginScreen({ navigation }) {
 
         <View style={styles.actions}>
           <AppButton loading={submitting} onPress={handleSubmit} title="Login" />
+          <AppButton
+            title="Forgot password"
+            variant="secondary"
+            onPress={() => navigation.navigate('ForgotPassword', { email: form.email })}
+          />
           <AppButton title="Back to home" variant="secondary" onPress={() => navigation.navigate('Landing')} />
         </View>
 

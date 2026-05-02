@@ -78,14 +78,15 @@ export default function AlertListScreen({ navigation }) {
             meta={
               user?.role === 'admin'
                 ? [
+                    `Audience: ${alertItem.sendToAll ? 'All users' : 'Targeted users'}`,
                     `Recipients: ${alertItem.notificationsSentCount || alertItem.targetedPatients?.length || 0}`,
                     `Age range: ${formatAgeRange(alertItem)}`,
-                    `Condition filter: ${alertItem.targetCondition || 'All patients'}`,
+                    `Condition filter: ${alertItem.sendToAll ? 'All users' : alertItem.targetCondition || 'All patients'}`,
                     `Created: ${formatDateTime(alertItem.createdAt)}`,
                   ]
                 : [
                     `Published: ${formatDateTime(alertItem.createdAt)}`,
-                    `Targeting: ${formatAgeRange(alertItem)}${alertItem.targetCondition ? `, ${alertItem.targetCondition}` : ''}`,
+                    `Targeting: ${alertItem.sendToAll ? 'All users' : `${formatAgeRange(alertItem)}${alertItem.targetCondition ? `, ${alertItem.targetCondition}` : ''}`}`,
                   ]
             }
             onPress={() => navigation.navigate('AlertForm', { alertItem })}

@@ -13,6 +13,20 @@ import { colors, radii, spacing, useTheme } from '../theme';
 import { openBillingInvoice } from '../utils/billing';
 import { formatCurrency, formatDateOnly, formatDateTime } from '../utils/date';
 
+const getPersonName = (person, fallback) => {
+  if (!person || typeof person !== 'object') {
+    return fallback;
+  }
+
+  const fullName = `${person.firstName || ''} ${person.lastName || ''}`.trim();
+  return fullName || fallback;
+};
+
+const getBillingTitle = (billing) => {
+  const appointmentReason = String(billing?.appointment?.reason || '').trim();
+  return appointmentReason || 'Clinic billing record';
+};
+
 export default function BillingListScreen({ navigation }) {
   const { user } = useAuth();
   const { colors: themeColors, isDark } = useTheme();
@@ -94,7 +108,7 @@ export default function BillingListScreen({ navigation }) {
                 <StatusBadge value={billing.status} />
               </View>
               <Text style={[styles.paymentMeta, { color: themeColors.textMuted }]}>
-                Doctor: {billing.doctor?.firstName} {billing.doctor?.lastName}
+                Doctor: {getPersonName(billing.doctor, 'Doctor not available')}
               </Text>
               <Text style={[styles.paymentMeta, { color: themeColors.textMuted }]}>
                 Appointment: {billing.appointment?.appointmentDate ? formatDateTime(billing.appointment.appointmentDate) : 'Not linked'}
@@ -137,14 +151,14 @@ export default function BillingListScreen({ navigation }) {
               key={billing._id}
               meta={[
                 `Amount: ${formatCurrency(billing.amount, billing.currency)}`,
-                `Patient: ${billing.patient?.firstName} ${billing.patient?.lastName}`,
+                `Patient: ${getPersonName(billing.patient, 'Patient not available')}`,
                 `Method: ${String(billing.paymentMethod || 'Not set').replace(/_/g, ' ')}`,
                 `Appointment: ${billing.appointment?.appointmentDate ? formatDateOnly(billing.appointment.appointmentDate) : 'Not linked'}`,
               ]}
               onPress={() => navigation.navigate('BillingDetail', { billing })}
               status={billing.status}
-              subtitle={`Doctor: ${billing.doctor?.firstName} ${billing.doctor?.lastName}`}
-              title={billing.appointment?.reason || 'Clinic billing record'}
+              subtitle={`Doctor: ${getPersonName(billing.doctor, 'Doctor not available')}`}
+              title={getBillingTitle(billing)}
               footer={
                 <View style={styles.billingFooter}>
                   {user?.role === 'finance_manager' ? (

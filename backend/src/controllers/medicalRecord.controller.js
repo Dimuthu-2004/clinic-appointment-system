@@ -1,13 +1,13 @@
 const fs = require('fs');
 const path = require('path');
 const Appointment = require('../models/Appointment');
-const Billing = require('../models/Billing');
 const MedicalRecord = require('../models/MedicalRecord');
 const User = require('../models/User');
 const ApiError = require('../utils/ApiError');
 const asyncHandler = require('../utils/asyncHandler');
+const { ensureDoctorCanStartAppointment } = require('../utils/appointmentStart');
 const { ensureResourceAccess } = require('../utils/access');
-const { getTodayDateKey, normalizeDateKey } = require('../utils/clinicSchedule');
+const { normalizeDateKey } = require('../utils/clinicSchedule');
 
 const populateMedicalRecord = [
   { path: 'patient', select: 'firstName lastName email phone' },
@@ -70,34 +70,6 @@ const ensureMedicalRecordActors = async ({ patientId, doctorId, appointmentId })
   };
 };
 
-const ensureDoctorCanStartAppointmentToday = async ({ reqUser, appointment }) => {
-  if (reqUser.role !== 'doctor' || !appointment) {
-    return;
-  }
-
-  if (String(appointment.doctor) !== String(reqUser._id)) {
-    throw new ApiError(403, 'You can only start appointments assigned to you');
-  }
-
-  if (normalizeDateKey(appointment.appointmentDate) !== getTodayDateKey()) {
-    throw new ApiError(422, 'You can only start appointments on the scheduled appointment day');
-  }
-
-  if (appointment.status === 'cancelled') {
-    throw new ApiError(422, 'Cancelled appointments cannot be started');
-  }
-
-  if (appointment.status === 'completed') {
-    throw new ApiError(422, 'This appointment has already been completed');
-  }
-
-  const billing = await Billing.findOne({ appointment: appointment._id }).select('status');
-
-  if (!billing || billing.status !== 'paid') {
-    throw new ApiError(422, 'Payment must be completed before this appointment can be started');
-  }
-};
-
 const createMedicalRecord = asyncHandler(async (req, res) => {
   if (req.user.role === 'patient') {
     throw new ApiError(403, 'Patients cannot create medical records');
@@ -117,7 +89,7 @@ const createMedicalRecord = asyncHandler(async (req, res) => {
     doctorId: payload.doctor,
     appointmentId: payload.appointment,
   });
-  await ensureDoctorCanStartAppointmentToday({ reqUser: req.user, appointment: actorContext.appointment });
+  await ensureDoctorCanStartAppointment({ reqUser: req.user, appointment: actorContext.appointment });
 
   payload.clinicalVitals = normalizeClinicalVitals(req.body.clinicalVitals || {});
 
@@ -210,7 +182,7 @@ const updateMedicalRecord = asyncHandler(async (req, res) => {
     doctorId: medicalRecord.doctor,
     appointmentId: medicalRecord.appointment,
   });
-  await ensureDoctorCanStartAppointmentToday({ reqUser: req.user, appointment: actorContext.appointment });
+  await ensureDoctorCanStartAppointment({ reqUser: req.user, appointment: actorContext.appointment });
 
   await medicalRecord.save();
 

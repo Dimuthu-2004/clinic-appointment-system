@@ -2,6 +2,10 @@ const { body, param, query } = require('express-validator');
 
 const appointmentIdValidation = [param('id').isMongoId().withMessage('Invalid appointment id')];
 
+const availabilityQuestionValidation = [
+  query('message').trim().notEmpty().withMessage('A message is required'),
+];
+
 const availableDoctorsValidation = [
   query('date').isISO8601().withMessage('A valid date is required'),
   query('session')
@@ -59,6 +63,7 @@ const listAppointmentValidation = [
 ];
 
 module.exports = {
+  availabilityQuestionValidation,
   availableDoctorsValidation,
   appointmentIdValidation,
   bookingPreviewValidation,

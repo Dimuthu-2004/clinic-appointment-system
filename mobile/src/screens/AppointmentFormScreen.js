@@ -18,32 +18,13 @@ import {
   setClinicHours,
   toDateKey,
 } from '../utils/clinicSchedule';
+import { getPatientCancellationState } from '../utils/appointmentRules';
 import { paymentMethods, specializations } from '../utils/constants';
 import { formatCurrency, toPickerItems } from '../utils/date';
 
 const APPOINTMENT_FEE = {
   amount: 2500,
   currency: 'LKR',
-};
-
-const getNextBookingDateKey = () => {
-  const nextDate = new Date();
-  nextDate.setDate(nextDate.getDate() + 1);
-  return toDateKey(nextDate);
-};
-
-const isAtLeast24HoursAway = (appointmentDate) => {
-  if (!appointmentDate) {
-    return false;
-  }
-
-  const selectedDate = new Date(appointmentDate);
-
-  if (Number.isNaN(selectedDate.getTime())) {
-    return false;
-  }
-
-  return selectedDate.getTime() - Date.now() >= 24 * 60 * 60 * 1000;
 };
 
 export default function AppointmentFormScreen({ navigation, route }) {
@@ -62,7 +43,7 @@ export default function AppointmentFormScreen({ navigation, route }) {
     patient: existingAppointment?.patient?._id || '',
     doctor: existingAppointment?.doctor?._id || '',
     appointmentDate: toDateKey(
-      existingAppointment?.appointmentDate || (isPatientNewBooking ? getNextBookingDateKey() : getTodayDateKey())
+      existingAppointment?.appointmentDate || getTodayDateKey()
     ),
     appointmentSession:
       existingAppointment?.appointmentSession || inferAppointmentSession(existingAppointment?.appointmentDate) || '',
@@ -77,6 +58,9 @@ export default function AppointmentFormScreen({ navigation, route }) {
   const [submitting, setSubmitting] = useState(false);
   const [sessionOptions, setSessionOptions] = useState([]);
   const [doctorSearch, setDoctorSearch] = useState('');
+  const [adminDoctorSearch, setAdminDoctorSearch] = useState(
+    existingAppointment?.doctor ? `${existingAppointment.doctor.firstName} ${existingAppointment.doctor.lastName}` : ''
+  );
   const [specializationFilter, setSpecializationFilter] = useState('');
   const [availableDoctors, setAvailableDoctors] = useState([]);
   const [searchingDoctors, setSearchingDoctors] = useState(false);
@@ -86,6 +70,7 @@ export default function AppointmentFormScreen({ navigation, route }) {
   const [hasAppliedPendingBooking, setHasAppliedPendingBooking] = useState(false);
   const [skipNextPatientAvailabilityReset, setSkipNextPatientAvailabilityReset] = useState(false);
   const [appointmentFee, setAppointmentFee] = useState(APPOINTMENT_FEE);
+  const cancellationState = existingAppointment ? getPatientCancellationState(existingAppointment) : null;
 
   const resolveSelectedDoctor = () => {
     if (form.doctor) {
@@ -130,6 +115,42 @@ export default function AppointmentFormScreen({ navigation, route }) {
     []
   );
 
+  const selectedDoctorFee = useMemo(() => {
+    if (bookingPreview?.appointmentFee?.amount) {
+      return bookingPreview.appointmentFee;
+    }
+
+    const selectedAvailableDoctor = availableDoctors.find((doctor) => doctor._id === form.doctor);
+
+    if (selectedAvailableDoctor?.appointmentFee?.amount) {
+      return selectedAvailableDoctor.appointmentFee;
+    }
+
+    const selectedDirectoryDoctor = doctors.find((doctor) => doctor._id === form.doctor);
+
+    if (selectedDirectoryDoctor?.appointmentFee?.amount) {
+      return selectedDirectoryDoctor.appointmentFee;
+    }
+
+    return appointmentFee;
+  }, [appointmentFee, availableDoctors, bookingPreview, doctors, form.doctor]);
+
+  const filteredDoctors = useMemo(() => {
+    if (isPatientNewBooking) {
+      return doctors;
+    }
+
+    const normalizedSearch = adminDoctorSearch.trim().toLowerCase();
+
+    if (!normalizedSearch) {
+      return doctors;
+    }
+
+    return doctors.filter((doctor) =>
+      `${doctor.firstName} ${doctor.lastName}`.trim().toLowerCase().includes(normalizedSearch)
+    );
+  }, [adminDoctorSearch, doctors, isPatientNewBooking]);
+
   useEffect(() => {
     const loadOptions = async () => {
       try {
@@ -170,6 +191,9 @@ export default function AppointmentFormScreen({ navigation, route }) {
 
     setForm(getInitialFormState());
     setDoctorSearch('');
+    setAdminDoctorSearch(
+      existingAppointment?.doctor ? `${existingAppointment.doctor.firstName} ${existingAppointment.doctor.lastName}` : ''
+    );
     setSpecializationFilter('');
     setAvailableDoctors([]);
     setBookingPreview(null);
@@ -347,13 +371,6 @@ export default function AppointmentFormScreen({ navigation, route }) {
       return;
     }
 
-    const selectedAppointmentDate = buildAppointmentDateForSession(form.appointmentDate, form.appointmentSession);
-
-    if (!isAtLeast24HoursAway(selectedAppointmentDate)) {
-      Alert.alert('Booking not available', 'Appointments must be booked at least 24 hours before the selected clinic session.');
-      return;
-    }
-
     try {
       setSearchingDoctors(true);
       const response = await api.get('/appointments/available-doctors', {
@@ -421,11 +438,6 @@ export default function AppointmentFormScreen({ navigation, route }) {
           : `${missingFields.slice(0, -1).join(', ')} and ${missingFields[missingFields.length - 1]}`;
 
       Alert.alert('Missing fields', `Please complete the ${missingLabel}.`);
-      return;
-    }
-
-    if (isPatientNewBooking && !isAtLeast24HoursAway(scheduledAppointmentDate)) {
-      Alert.alert('Booking not available', 'Appointments must be booked at least 24 hours before the selected clinic session.');
       return;
     }
 
@@ -497,7 +509,7 @@ export default function AppointmentFormScreen({ navigation, route }) {
       const paymentSummary = savedAppointment?.paymentSummary;
       const successMessage =
         isPatientNewBooking && savedAppointment?.tokenNumber
-          ? `Appointment booked successfully. Your token number is ${savedAppointment.tokenNumber}. Fee: ${formatCurrency(paymentSummary?.amount || appointmentFee.amount, paymentSummary?.currency || appointmentFee.currency)}.`
+          ? `Appointment booked successfully. Your token number is ${savedAppointment.tokenNumber}. Fee: ${formatCurrency(paymentSummary?.amount || selectedDoctorFee.amount, paymentSummary?.currency || selectedDoctorFee.currency)}.`
           : 'Appointment saved successfully.';
 
       Alert.alert('Saved', successMessage);
@@ -508,6 +520,38 @@ export default function AppointmentFormScreen({ navigation, route }) {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleCancelAppointment = async () => {
+    if (!existingAppointment?._id) {
+      return;
+    }
+
+    if (!cancellationState?.canCancel) {
+      Alert.alert('Cancellation unavailable', cancellationState?.reason || 'This appointment cannot be cancelled.');
+      return;
+    }
+
+    Alert.alert(
+      'Cancel appointment',
+      'Are you sure you want to cancel this appointment? This action cannot be undone.',
+      [
+        { text: 'Keep appointment', style: 'cancel' },
+        {
+          text: 'Cancel appointment',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await api.put(`/appointments/${existingAppointment._id}`, { status: 'cancelled' });
+              Alert.alert('Cancelled', 'Your appointment has been cancelled successfully.');
+              navigation.goBack();
+            } catch (error) {
+              Alert.alert('Cancellation failed', error?.response?.data?.message || 'Unable to cancel appointment.');
+            }
+          },
+        },
+      ]
+    );
   };
 
   const handleDelete = async () => {
@@ -572,7 +616,7 @@ export default function AppointmentFormScreen({ navigation, route }) {
 
         <DateTimeField
           label="Appointment date"
-          minimumDate={isPatientNewBooking ? new Date(`${getNextBookingDateKey()}T00:00:00`) : undefined}
+          minimumDate={isPatientNewBooking ? new Date(`${getTodayDateKey()}T00:00:00`) : undefined}
           mode="date"
           onChange={(appointmentDate) => setForm((current) => ({ ...current, appointmentDate }))}
           value={form.appointmentDate}
@@ -709,10 +753,7 @@ export default function AppointmentFormScreen({ navigation, route }) {
                   </Text>
                 </View>
                 <Text style={[styles.paymentWarning, { color: themeColors.danger }]}>
-                  Appointment fee: {formatCurrency(
-                    bookingPreview.appointmentFee?.amount || appointmentFee.amount,
-                    bookingPreview.appointmentFee?.currency || appointmentFee.currency
-                  )}. Payment must be completed before the doctor can start the appointment.
+                  Payment must be completed before the doctor can start the appointment.
                 </Text>
               </View>
             ) : null}
@@ -728,10 +769,12 @@ export default function AppointmentFormScreen({ navigation, route }) {
             >
               <Text style={[styles.feeLabel, { color: themeColors.textMuted }]}>Appointment fee</Text>
               <Text style={[styles.feeAmount, { color: themeColors.primaryDark }]}>
-                {formatCurrency(appointmentFee.amount, appointmentFee.currency)}
+                {formatCurrency(selectedDoctorFee.amount, selectedDoctorFee.currency)}
               </Text>
               <Text style={[styles.feeHint, { color: themeColors.textMuted }]}>
-                Choose PayPal for online payment, or cash/card if you plan to pay at the clinic counter.
+                {form.doctor
+                  ? 'This is the fee for the currently selected doctor. Choose PayPal for online payment, or cash/card if you plan to pay at the clinic counter.'
+                  : 'This is the clinic default fee until you select a doctor. Choose PayPal for online payment, or cash/card if you plan to pay at the clinic counter.'}
               </Text>
             </View>
             <AppSelect
@@ -751,14 +794,31 @@ export default function AppointmentFormScreen({ navigation, route }) {
           </>
         ) : (
           <>
+            <AppInput
+              label="Search doctor by name"
+              onChangeText={setAdminDoctorSearch}
+              placeholder="Type a doctor's name"
+              value={adminDoctorSearch}
+            />
             <AppSelect
-              items={toPickerItems(doctors, (doctor) =>
+              items={toPickerItems(filteredDoctors, (doctor) =>
                 `${doctor.firstName} ${doctor.lastName}${doctor.specialization ? ` - ${doctor.specialization}` : ''}`
               )}
               label="Doctor"
-              onValueChange={(doctor) => setForm((current) => ({ ...current, doctor }))}
+              onValueChange={(doctorId) => {
+                const selectedDoctor = doctors.find((item) => item._id === doctorId);
+                setForm((current) => ({ ...current, doctor: doctorId }));
+                if (selectedDoctor) {
+                  setAdminDoctorSearch(`${selectedDoctor.firstName} ${selectedDoctor.lastName}`);
+                }
+              }}
               value={form.doctor}
             />
+            {adminDoctorSearch.trim() && filteredDoctors.length === 0 ? (
+              <Text style={[styles.helperText, { color: themeColors.danger }]}>
+                No doctors matched that name.
+              </Text>
+            ) : null}
             <AppSelect
               items={sessionPickerItems}
               label="Clinic session"
@@ -780,7 +840,20 @@ export default function AppointmentFormScreen({ navigation, route }) {
             onPress={handleSubmit}
             title={isGuestBooking ? 'Continue to confirm' : isPatientNewBooking ? 'Confirm booking' : 'Save appointment'}
           />
-          {existingAppointment ? <AppButton onPress={handleDelete} title="Delete" variant="danger" /> : null}
+          {user?.role === 'patient' && existingAppointment ? (
+            <AppButton
+              disabled={!cancellationState?.canCancel}
+              onPress={handleCancelAppointment}
+              title={cancellationState?.canCancel ? 'Cancel appointment' : 'Cancellation unavailable'}
+              variant={cancellationState?.canCancel ? 'danger' : 'secondary'}
+            />
+          ) : null}
+          {existingAppointment && user?.role !== 'patient' ? <AppButton onPress={handleDelete} title="Delete" variant="danger" /> : null}
+          {user?.role === 'patient' && existingAppointment && !cancellationState?.canCancel ? (
+            <Text style={[styles.helperText, { color: themeColors.textMuted }]}>
+              {cancellationState?.reason}
+            </Text>
+          ) : null}
         </View>
       </View>
     </ScreenContainer>

@@ -45,6 +45,7 @@ const ageRangeValidation = body().custom((_, { req }) => {
 const createAlertValidation = [
   body('title').trim().notEmpty().withMessage('Title is required'),
   body('message').trim().notEmpty().withMessage('Message is required'),
+  body('sendToAll').optional().isBoolean().withMessage('Send to all users must be true or false'),
   body('minAge').optional({ values: 'falsy' }).isInt({ min: 0 }).withMessage('Minimum age must be 0 or more'),
   body('maxAge').optional({ values: 'falsy' }).isInt({ min: 1, max: 120 }).withMessage('Maximum age must be between 1 and 120'),
   body('targetCondition')
@@ -63,6 +64,7 @@ const updateAlertValidation = [
   ...alertIdValidation,
   body('title').optional().trim().notEmpty().withMessage('Title cannot be empty'),
   body('message').optional().trim().notEmpty().withMessage('Message cannot be empty'),
+  body('sendToAll').optional().isBoolean().withMessage('Send to all users must be true or false'),
   body('minAge').optional({ values: 'falsy' }).isInt({ min: 0 }).withMessage('Minimum age must be 0 or more'),
   body('maxAge').optional({ values: 'falsy' }).isInt({ min: 1, max: 120 }).withMessage('Maximum age must be between 1 and 120'),
   body('targetCondition')

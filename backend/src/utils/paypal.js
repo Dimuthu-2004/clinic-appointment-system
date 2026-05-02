@@ -1,17 +1,32 @@
 const ApiError = require('./ApiError');
 
+const normalizeEnvValue = (value) => String(value || '').trim();
+const isPlaceholderValue = (value) => {
+  const normalized = normalizeEnvValue(value).toLowerCase();
+  return (
+    !normalized ||
+    normalized === 'your_paypal_client_id' ||
+    normalized === 'your_paypal_client_secret' ||
+    normalized === 'replace_me'
+  );
+};
+
 const getPaypalBaseUrl = () =>
-  process.env.PAYPAL_MODE === 'live'
+  normalizeEnvValue(process.env.PAYPAL_MODE).toLowerCase() === 'live'
     ? 'https://api-m.paypal.com'
     : 'https://api-m.sandbox.paypal.com';
 
 const getPaypalCheckoutBaseUrl = () =>
-  process.env.PAYPAL_MODE === 'live'
+  normalizeEnvValue(process.env.PAYPAL_MODE).toLowerCase() === 'live'
     ? 'https://www.paypal.com'
     : 'https://www.sandbox.paypal.com';
 
 const isPaypalConfigured = () =>
-  Boolean(process.env.PAYPAL_CLIENT_ID && process.env.PAYPAL_CLIENT_SECRET && process.env.SERVER_PUBLIC_URL);
+  Boolean(
+    !isPlaceholderValue(process.env.PAYPAL_CLIENT_ID) &&
+      !isPlaceholderValue(process.env.PAYPAL_CLIENT_SECRET) &&
+      normalizeEnvValue(process.env.SERVER_PUBLIC_URL)
+  );
 
 const getPaypalSettlementCurrency = () => (process.env.PAYPAL_SETTLEMENT_CURRENCY || 'USD').toUpperCase();
 
@@ -57,11 +72,14 @@ const buildPaypalCheckoutAmount = ({ amount, currency }) => {
 
 const getPaypalAccessToken = async () => {
   if (!isPaypalConfigured()) {
-    throw new ApiError(503, 'PayPal is not configured on the server');
+    throw new ApiError(
+      503,
+      'PayPal is not configured on the server. Add real PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET values in backend/.env.'
+    );
   }
 
   const credentials = Buffer.from(
-    `${process.env.PAYPAL_CLIENT_ID}:${process.env.PAYPAL_CLIENT_SECRET}`
+    `${normalizeEnvValue(process.env.PAYPAL_CLIENT_ID)}:${normalizeEnvValue(process.env.PAYPAL_CLIENT_SECRET)}`
   ).toString('base64');
 
   const response = await fetch(`${getPaypalBaseUrl()}/v1/oauth2/token`, {
@@ -74,7 +92,21 @@ const getPaypalAccessToken = async () => {
   });
 
   if (!response.ok) {
-    throw new ApiError(502, 'Unable to authenticate with PayPal');
+    let paypalMessage = '';
+
+    try {
+      const payload = await response.json();
+      paypalMessage = payload?.error_description || payload?.error || payload?.message || '';
+    } catch (_error) {
+      // Ignore parsing failures and fall back to the generic message below.
+    }
+
+    throw new ApiError(
+      502,
+      paypalMessage
+        ? `Unable to authenticate with PayPal: ${paypalMessage}`
+        : 'Unable to authenticate with PayPal'
+    );
   }
 
   const payload = await response.json();

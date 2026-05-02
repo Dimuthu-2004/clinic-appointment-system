@@ -66,8 +66,26 @@ const resolveAgeRange = ({ minAge, maxAge, ageLimit }) => {
   };
 };
 
-const getTargetPatientIds = async ({ minAge, maxAge, ageLimit, targetCondition }) => {
+const normalizeSendToAll = (value) => value === true || value === 'true';
+
+const hasTargetingFilters = ({ minAge, maxAge, ageLimit, targetCondition, sendToAll = false }) => {
+  if (normalizeSendToAll(sendToAll)) {
+    return true;
+  }
+
+  const resolvedAgeRange = resolveAgeRange({ minAge, maxAge, ageLimit });
+  const normalizedCondition = String(targetCondition || '').trim();
+
+  return resolvedAgeRange.minAge !== null || resolvedAgeRange.maxAge !== null || Boolean(normalizedCondition);
+};
+
+const getTargetPatientIds = async ({ minAge, maxAge, ageLimit, targetCondition, sendToAll = false }) => {
   const patients = await User.find({ role: 'patient' }).select('_id dateOfBirth');
+
+  if (normalizeSendToAll(sendToAll)) {
+    return patients.map((patient) => String(patient._id));
+  }
+
   const resolvedAgeRange = resolveAgeRange({ minAge, maxAge, ageLimit });
 
   let filteredPatientIds = patients.map((patient) => String(patient._id));
@@ -111,7 +129,7 @@ const getTargetPatientIds = async ({ minAge, maxAge, ageLimit, targetCondition }
   }
 
   if (resolvedAgeRange.minAge === null && resolvedAgeRange.maxAge === null && !normalizedCondition) {
-    return patients.map((patient) => String(patient._id));
+    return [];
   }
 
   return filteredPatientIds;
@@ -136,6 +154,7 @@ const deliverAlertNotifications = async ({ alert, patientIds }) => {
           minAge: alert.minAge,
           maxAge: alert.maxAge,
           targetCondition: alert.targetCondition,
+          sendToAll: alert.sendToAll,
         },
       });
     })
@@ -147,17 +166,32 @@ const createAlert = asyncHandler(async (req, res) => {
     throw new ApiError(403, 'Only admins can create alerts');
   }
 
+  const sendToAll = normalizeSendToAll(req.body.sendToAll);
+
+  if (
+    !hasTargetingFilters({
+      minAge: req.body.minAge,
+      maxAge: req.body.maxAge,
+      ageLimit: req.body.ageLimit,
+      targetCondition: req.body.targetCondition,
+      sendToAll,
+    })
+  ) {
+    throw new ApiError(422, 'Choose an age limit or target condition, or select send to all users.');
+  }
+
   const targetedPatientIds = await getTargetPatientIds({
-    minAge: req.body.minAge,
-    maxAge: req.body.maxAge,
-    ageLimit: req.body.ageLimit,
-    targetCondition: req.body.targetCondition,
+    minAge: sendToAll ? null : req.body.minAge,
+    maxAge: sendToAll ? null : req.body.maxAge,
+    ageLimit: sendToAll ? null : req.body.ageLimit,
+    targetCondition: sendToAll ? '' : req.body.targetCondition,
+    sendToAll,
   });
 
   const resolvedAgeRange = resolveAgeRange({
-    minAge: req.body.minAge,
-    maxAge: req.body.maxAge,
-    ageLimit: req.body.ageLimit,
+    minAge: sendToAll ? null : req.body.minAge,
+    maxAge: sendToAll ? null : req.body.maxAge,
+    ageLimit: sendToAll ? null : req.body.ageLimit,
   });
 
   const alert = await Alert.create({
@@ -166,7 +200,8 @@ const createAlert = asyncHandler(async (req, res) => {
     minAge: resolvedAgeRange.minAge,
     maxAge: resolvedAgeRange.maxAge,
     ageLimit: null,
-    targetCondition: String(req.body.targetCondition || '').trim(),
+    targetCondition: sendToAll ? '' : String(req.body.targetCondition || '').trim(),
+    sendToAll,
     status: req.body.status || 'active',
     createdBy: req.user._id,
     targetedPatients: targetedPatientIds,
@@ -247,7 +282,8 @@ const updateAlert = asyncHandler(async (req, res) => {
   const targetingChanged =
     req.body.minAge !== undefined ||
     req.body.maxAge !== undefined ||
-    req.body.targetCondition !== undefined;
+    req.body.targetCondition !== undefined ||
+    req.body.sendToAll !== undefined;
 
   allowedFields.forEach((field) => {
     if (req.body[field] !== undefined) {
@@ -258,13 +294,36 @@ const updateAlert = asyncHandler(async (req, res) => {
     }
   });
 
+  if (req.body.sendToAll !== undefined) {
+    alert.sendToAll = normalizeSendToAll(req.body.sendToAll);
+  }
+
   if (targetingChanged) {
+    if (
+      !hasTargetingFilters({
+        minAge: alert.minAge,
+        maxAge: alert.maxAge,
+        ageLimit: alert.ageLimit,
+        targetCondition: alert.targetCondition,
+        sendToAll: alert.sendToAll,
+      })
+    ) {
+      throw new ApiError(422, 'Choose an age limit or target condition, or select send to all users.');
+    }
+
+    if (alert.sendToAll) {
+      alert.minAge = null;
+      alert.maxAge = null;
+      alert.targetCondition = '';
+    }
+
     alert.ageLimit = null;
     const targetedPatientIds = await getTargetPatientIds({
       minAge: alert.minAge,
       maxAge: alert.maxAge,
       ageLimit: alert.ageLimit,
       targetCondition: alert.targetCondition,
+      sendToAll: alert.sendToAll,
     });
 
     const previousPatientIds = new Set((alert.targetedPatients || []).map((patientId) => String(patientId)));

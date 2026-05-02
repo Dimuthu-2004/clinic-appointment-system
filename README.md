@@ -133,7 +133,15 @@ NODE_ENV=development
 MONGO_URI=mongodb://127.0.0.1:27017/clinic_appointment_system
 JWT_SECRET=replace_with_a_secure_secret
 JWT_EXPIRES_IN=7d
+PASSWORD_RESET_CODE_EXPIRES_MINUTES=15
 CLIENT_URL=http://localhost:8081,http://localhost:19006
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=your_email@example.com
+SMTP_PASS=your_email_app_password_or_smtp_key
+EMAIL_FROM_NAME=Smart Clinic
+EMAIL_FROM_ADDRESS=your_email@example.com
 ```
 
 ### Backend Base URL
@@ -150,6 +158,8 @@ http://localhost:5000/api
 - `POST /api/auth/register/doctor`
 - `POST /api/auth/register/staff`
 - `POST /api/auth/login`
+- `POST /api/auth/forgot-password`
+- `POST /api/auth/reset-password`
 - `GET /api/auth/me`
 - `PATCH /api/auth/me`
 
@@ -237,8 +247,16 @@ http://localhost:5000/api
 
 ```bash
 npm install
-npx expo start
+npm run start:lan:clear
 ```
+
+If you need a tunnel, use:
+
+```bash
+npm run start:tunnel:clear
+```
+
+If Ngrok is having an outage or refuses the tunnel, this launcher automatically falls back to LAN mode instead of exiting.
 
 ### Mobile Environment Example
 
@@ -262,6 +280,30 @@ EXPO_PUBLIC_API_FALLBACK_URL=https://your-smart-clinic-api.onrender.com/api
 ```
 
 The mobile app will prefer the first reachable backend and keep file, upload, and invoice links on that same backend.
+
+### Forgot Password Setup
+
+The mobile app now includes a forgot-password screen. It sends a 6-digit reset code by email, then lets the user set a new password inside the app.
+
+Add these variables to `backend/.env`:
+
+```env
+PASSWORD_RESET_CODE_EXPIRES_MINUTES=15
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=your_email@example.com
+SMTP_PASS=your_email_app_password_or_smtp_key
+EMAIL_FROM_NAME=Smart Clinic
+EMAIL_FROM_ADDRESS=your_email@example.com
+```
+
+If you use Gmail:
+
+1. Turn on 2-Step Verification for the Google account that will send mail.
+2. Create an App Password for Mail.
+3. Put that generated 16-character app password into `SMTP_PASS`.
+4. Set `SMTP_USER` and `EMAIL_FROM_ADDRESS` to the same Gmail address.
 
 ## How To Use
 

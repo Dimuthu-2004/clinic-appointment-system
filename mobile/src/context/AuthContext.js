@@ -26,6 +26,12 @@ export function AuthProvider({ children }) {
     registeredPushUserIdRef.current = '';
   };
 
+  const hydrateSession = (session) => {
+    setAuthToken(session?.token || null);
+    setToken(session?.token || null);
+    setUser(session?.user || null);
+  };
+
   useEffect(() => {
     const bootstrap = async () => {
       try {
@@ -49,12 +55,25 @@ export function AuthProvider({ children }) {
         }
 
         const session = JSON.parse(sessionString);
-        setAuthToken(session.token);
-        setToken(session.token);
-        setUser(session.user);
+        hydrateSession(session);
+        setLoading(false);
 
-        const response = await api.get('/auth/me');
-        setUser(response.data.data);
+        try {
+          const response = await api.get('/auth/me', {
+            timeout: 5000,
+          });
+          const nextUser = response.data.data;
+
+          setUser(nextUser);
+          await SecureStore.setItemAsync(
+            STORAGE_KEY,
+            JSON.stringify({ token: session.token, user: nextUser })
+          );
+        } catch (error) {
+          if (error?.response?.status === 401) {
+            await clearSessionState();
+          }
+        }
       } catch (_error) {
         await clearSessionState();
       } finally {
@@ -189,6 +208,20 @@ export function AuthProvider({ children }) {
     }
   };
 
+  const requestPasswordReset = async (email) => {
+    await api.post('/auth/forgot-password', {
+      email: String(email || '').trim().toLowerCase(),
+    });
+  };
+
+  const resetPassword = async ({ email, resetCode, password }) => {
+    await api.post('/auth/reset-password', {
+      email: String(email || '').trim().toLowerCase(),
+      resetCode: String(resetCode || '').trim(),
+      password,
+    });
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -203,6 +236,8 @@ export function AuthProvider({ children }) {
         signOut,
         refreshProfile,
         updateProfile,
+        requestPasswordReset,
+        resetPassword,
         startAppointmentBookingAuthFlow,
         clearPendingAppointmentBooking,
         consumePostAuthDestination,

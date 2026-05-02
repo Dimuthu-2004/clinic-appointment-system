@@ -3,6 +3,9 @@ const path = require("path");
 
 const args = process.argv.slice(2);
 const shouldClear = args.includes("--clear");
+const shouldUseTunnel = args.includes("--tunnel");
+const shouldUseLocalhost = args.includes("--localhost");
+const requestedMode = shouldUseTunnel ? "tunnel" : shouldUseLocalhost ? "localhost" : "lan";
 
 function clearMetroPort() {
   if (process.platform !== "win32") {
@@ -26,21 +29,68 @@ function clearMetroPort() {
 clearMetroPort();
 
 const expoCli = path.join(__dirname, "..", "node_modules", "expo", "bin", "cli");
-const expoArgs = [expoCli, "start", "--lan"];
+const projectRoot = path.join(__dirname, "..");
+const tunnelFailurePatterns = [
+  "failed to start tunnel",
+  "remote gone away",
+  "ngrok",
+];
 
-if (shouldClear) {
-  expoArgs.push("--clear");
+function buildExpoArgs(mode) {
+  const expoArgs = [expoCli, "start", `--${mode}`];
+
+  if (shouldClear) {
+    expoArgs.push("--clear");
+  }
+
+  return expoArgs;
 }
 
-const child = spawn(process.execPath, expoArgs, {
-  cwd: path.join(__dirname, ".."),
-  stdio: "inherit",
-});
+function runExpo(mode, { allowFallback = false } = {}) {
+  const expoArgs = buildExpoArgs(mode);
+  const child = spawn(process.execPath, expoArgs, {
+    cwd: projectRoot,
+    stdio: ["inherit", "pipe", "pipe"],
+  });
 
-child.on("exit", (code, signal) => {
-  if (signal) {
-    process.kill(process.pid, signal);
-    return;
-  }
-  process.exit(code ?? 0);
-});
+  let combinedOutput = "";
+
+  child.stdout.on("data", (chunk) => {
+    const text = chunk.toString();
+    combinedOutput += text;
+    process.stdout.write(text);
+  });
+
+  child.stderr.on("data", (chunk) => {
+    const text = chunk.toString();
+    combinedOutput += text;
+    process.stderr.write(text);
+  });
+
+  child.on("exit", (code, signal) => {
+    if (signal) {
+      process.kill(process.pid, signal);
+      return;
+    }
+
+    const normalizedOutput = combinedOutput.toLowerCase();
+    const shouldFallbackToLan =
+      allowFallback &&
+      code !== 0 &&
+      tunnelFailurePatterns.some((pattern) => normalizedOutput.includes(pattern));
+
+    if (shouldFallbackToLan) {
+      process.stdout.write(
+        "\nTunnel startup failed because Ngrok is unavailable, so the project is automatically falling back to LAN mode.\n" +
+          "Use this repo's launcher with `npm run start:tunnel` or `npm run start:tunnel:clear` when you want tunnel mode with automatic LAN fallback.\n"
+      );
+      clearMetroPort();
+      runExpo("lan");
+      return;
+    }
+
+    process.exit(code ?? 0);
+  });
+}
+
+runExpo(requestedMode, { allowFallback: shouldUseTunnel });

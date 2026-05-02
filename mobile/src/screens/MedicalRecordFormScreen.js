@@ -10,7 +10,7 @@ import LoadingOverlay from '../components/LoadingOverlay';
 import ScreenContainer from '../components/ScreenContainer';
 import { useAuth } from '../hooks/useAuth';
 import { colors, radii, spacing, useTheme } from '../theme';
-import { getTodayDateKey, toDateKey } from '../utils/clinicSchedule';
+import { getDoctorStartState } from '../utils/appointmentRules';
 import { formatDateTime, toPickerItems } from '../utils/date';
 
 const buildVitalsState = (clinicalVitals = {}) => ({
@@ -88,7 +88,8 @@ export default function MedicalRecordFormScreen({ navigation, route }) {
   const linkedAppointment = route.params?.appointment || existingRecord?.appointment || null;
   const isDoctorStartMode = user?.role === 'doctor' && route.params?.startMode;
   const canEdit = ['doctor', 'admin'].includes(user?.role);
-  const canStartToday = !linkedAppointment || toDateKey(linkedAppointment.appointmentDate) === getTodayDateKey();
+  const doctorStartState = linkedAppointment ? getDoctorStartState(linkedAppointment) : { canStart: true, reason: '' };
+  const canStartToday = doctorStartState.canStart;
   const isDoctorCompletedRecordView = user?.role === 'doctor' && existingRecord && !isDoctorStartMode;
   const canEditCurrentForm = canEdit && !isDoctorCompletedRecordView && (!isDoctorStartMode || canStartToday);
   const [patients, setPatients] = useState([]);
@@ -161,7 +162,7 @@ export default function MedicalRecordFormScreen({ navigation, route }) {
     }
 
     if (isDoctorStartMode && !canStartToday) {
-      Alert.alert('Not available', 'Doctors can only start appointments on the scheduled appointment day.');
+      Alert.alert('Not available', doctorStartState.reason);
       return;
     }
 
@@ -321,7 +322,7 @@ export default function MedicalRecordFormScreen({ navigation, route }) {
             <Text style={[styles.summaryText, { color: themeColors.text }]}>Token: {appointmentSummary.tokenNumber || '-'}</Text>
             {!canStartToday && isDoctorStartMode ? (
               <Text style={[styles.summaryWarning, { color: themeColors.danger }]}>
-                Doctors can only start appointments on the scheduled day.
+                {doctorStartState.reason}
               </Text>
             ) : null}
           </View>
