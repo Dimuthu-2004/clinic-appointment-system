@@ -1,9 +1,13 @@
-import { Linking, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Alert, Linking, ScrollView, StyleSheet, Text, View } from 'react-native';
 import AppButton from '../components/AppButton';
 import EmptyState from '../components/EmptyState';
+import LoadingOverlay from '../components/LoadingOverlay';
 import ScreenContainer from '../components/ScreenContainer';
+import VitalsTrendSection from '../components/VitalsTrendSection';
+import api, { getApiBaseUrl } from '../api/client';
 import { colors, radii, spacing, useTheme } from '../theme';
-import { getFileBaseUrl } from '../api/client';
+import { useAuth } from '../hooks/useAuth';
 import { formatDateOnly, formatDateTime } from '../utils/date';
 
 const formatVitals = (clinicalVitals = {}) => {
@@ -52,7 +56,45 @@ const formatVitals = (clinicalVitals = {}) => {
 
 export default function PatientMedicalRecordScreen({ route }) {
   const { colors: themeColors, isDark } = useTheme();
+  const { user } = useAuth();
   const medicalRecord = route.params?.medicalRecord || null;
+  const [history, setHistory] = useState(null);
+  const [loadingHistory, setLoadingHistory] = useState(true);
+  const patientId = medicalRecord?.patient?._id || user?._id;
+
+  useEffect(() => {
+    let active = true;
+
+    const loadHistory = async () => {
+      if (!patientId) {
+        setLoadingHistory(false);
+        return;
+      }
+
+      try {
+        setLoadingHistory(true);
+        const response = await api.get(`/medical-records/${patientId}/history`);
+        if (active) {
+          setHistory(response.data.data);
+        }
+      } catch (error) {
+        if (active) {
+          setHistory(null);
+          Alert.alert('Unable to load vitals history', error?.response?.data?.message || 'Try again later.');
+        }
+      } finally {
+        if (active) {
+          setLoadingHistory(false);
+        }
+      }
+    };
+
+    loadHistory();
+
+    return () => {
+      active = false;
+    };
+  }, [patientId]);
 
   if (!medicalRecord) {
     return (
@@ -121,6 +163,19 @@ export default function PatientMedicalRecordScreen({ route }) {
           ))}
         </SectionCard>
 
+        <SectionCard title="Clinical Vitals Trends" themeColors={themeColors}>
+          {loadingHistory ? (
+            <View style={styles.loadingBox}>
+              <LoadingOverlay message="Loading vitals trends..." />
+            </View>
+          ) : (
+            <VitalsTrendSection
+              emptyMessage="No clinical vitals trends are available for your records yet."
+              items={history?.vitalsSummary || []}
+            />
+          )}
+        </SectionCard>
+
         <SectionCard title="Attachments" themeColors={themeColors}>
           {medicalRecord.attachments?.length ? (
             medicalRecord.attachments.map((attachment) => (
@@ -130,7 +185,7 @@ export default function PatientMedicalRecordScreen({ route }) {
                   {attachment.mimeType || 'File'}{attachment.uploadedAt ? ` | ${formatDateOnly(attachment.uploadedAt)}` : ''}
                 </Text>
                 <AppButton
-                  onPress={() => Linking.openURL(`${getFileBaseUrl()}/${attachment.url}`)}
+                  onPress={() => Linking.openURL(`${getApiBaseUrl().replace(/\/api$/, '')}/${attachment.url}`)}
                   title="Open attachment"
                   variant="outline"
                 />
@@ -225,5 +280,9 @@ const styles = StyleSheet.create({
   attachmentMeta: {
     lineHeight: 20,
     marginBottom: spacing.md,
+  },
+  loadingBox: {
+    minHeight: 120,
+    justifyContent: 'center',
   },
 });

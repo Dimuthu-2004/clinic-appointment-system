@@ -373,8 +373,8 @@ const getDoctorPatientDirectory = asyncHandler(async (req, res) => {
 });
 
 const getDoctorPatientHistory = asyncHandler(async (req, res) => {
-  if (req.user.role !== 'doctor' && req.user.role !== 'admin') {
-    throw new ApiError(403, 'Only doctors or admins can access patient history');
+  if (req.user.role !== 'doctor' && req.user.role !== 'admin' && req.user.role !== 'patient') {
+    throw new ApiError(403, 'You do not have access to patient history');
   }
 
   const patient = await User.findById(req.params.patientId).select('firstName lastName email phone role');
@@ -389,6 +389,10 @@ const getDoctorPatientHistory = asyncHandler(async (req, res) => {
 
   if (req.user.role === 'doctor') {
     appointmentFilter.doctor = req.user._id;
+  }
+
+  if (req.user.role === 'patient' && String(req.user._id) !== String(patient._id)) {
+    throw new ApiError(403, 'You can only view your own medical history');
   }
 
   const appointments = await Appointment.find(appointmentFilter)
