@@ -1,15 +1,8 @@
 const ApiError = require('./ApiError');
+const { isPlaceholderValue, normalizeEnvValue } = require('./env');
 
-const normalizeEnvValue = (value) => String(value || '').trim();
-const isPlaceholderValue = (value) => {
-  const normalized = normalizeEnvValue(value).toLowerCase();
-  return (
-    !normalized ||
-    normalized === 'your_paypal_client_id' ||
-    normalized === 'your_paypal_client_secret' ||
-    normalized === 'replace_me'
-  );
-};
+const isPaypalPlaceholderValue = (value) =>
+  isPlaceholderValue(value, ['your_paypal_client_id', 'your_paypal_client_secret', 'replace_me']);
 
 const getPaypalBaseUrl = () =>
   normalizeEnvValue(process.env.PAYPAL_MODE).toLowerCase() === 'live'
@@ -23,8 +16,8 @@ const getPaypalCheckoutBaseUrl = () =>
 
 const isPaypalConfigured = () =>
   Boolean(
-    !isPlaceholderValue(process.env.PAYPAL_CLIENT_ID) &&
-      !isPlaceholderValue(process.env.PAYPAL_CLIENT_SECRET) &&
+    !isPaypalPlaceholderValue(process.env.PAYPAL_CLIENT_ID) &&
+      !isPaypalPlaceholderValue(process.env.PAYPAL_CLIENT_SECRET) &&
       normalizeEnvValue(process.env.SERVER_PUBLIC_URL)
   );
 

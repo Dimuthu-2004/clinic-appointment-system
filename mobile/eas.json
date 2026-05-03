@@ -7,12 +7,18 @@
     "preview": {
       "distribution": "internal",
       "environment": "preview",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://just-rebirth-production-52bb.up.railway.app/api"
+      },
       "android": {
         "buildType": "apk"
       }
     },
     "production": {
       "environment": "production",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://just-rebirth-production-52bb.up.railway.app/api"
+      },
       "autoIncrement": true
     }
   },

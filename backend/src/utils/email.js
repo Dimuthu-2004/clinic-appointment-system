@@ -1,33 +1,40 @@
 const nodemailer = require('nodemailer');
 const ApiError = require('./ApiError');
+const { isPlaceholderValue, normalizeEnvValue } = require('./env');
 
 const parseBoolean = (value) => String(value || '').trim().toLowerCase() === 'true';
 
-const normalizeSmtpPassword = (value) => String(value || '').trim().replace(/\s+/g, '');
+const normalizeSmtpPassword = (value) => normalizeEnvValue(value).replace(/\s+/g, '');
+
+const isEmailPlaceholderValue = (value) =>
+  isPlaceholderValue(value, ['your_email@example.com', 'your_email_app_password_or_smtp_key', 'replace_me']);
 
 const isEmailServiceConfigured = () =>
   Boolean(
-    process.env.SMTP_HOST &&
-      process.env.SMTP_PORT &&
-      process.env.SMTP_USER &&
-      process.env.SMTP_PASS &&
-      process.env.EMAIL_FROM_ADDRESS
+    normalizeEnvValue(process.env.SMTP_HOST) &&
+      normalizeEnvValue(process.env.SMTP_PORT) &&
+      !isEmailPlaceholderValue(process.env.SMTP_USER) &&
+      !isEmailPlaceholderValue(process.env.SMTP_PASS) &&
+      !isEmailPlaceholderValue(process.env.EMAIL_FROM_ADDRESS)
   );
 
 const getTransporter = () =>
   nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: Number(process.env.SMTP_PORT || 587),
+    host: normalizeEnvValue(process.env.SMTP_HOST),
+    port: Number(normalizeEnvValue(process.env.SMTP_PORT) || 587),
     secure: parseBoolean(process.env.SMTP_SECURE),
+    connectionTimeout: 8000,
+    greetingTimeout: 8000,
+    socketTimeout: 10000,
     auth: {
-      user: String(process.env.SMTP_USER || '').trim(),
+      user: normalizeEnvValue(process.env.SMTP_USER),
       pass: normalizeSmtpPassword(process.env.SMTP_PASS),
     },
   });
 
 const getFromAddress = () => {
-  const address = String(process.env.EMAIL_FROM_ADDRESS || '').trim();
-  const name = String(process.env.EMAIL_FROM_NAME || 'Smart Clinic').trim();
+  const address = normalizeEnvValue(process.env.EMAIL_FROM_ADDRESS);
+  const name = normalizeEnvValue(process.env.EMAIL_FROM_NAME || 'Smart Clinic');
 
   return name ? `"${name.replace(/"/g, '\\"')}" <${address}>` : address;
 };
@@ -36,7 +43,7 @@ const sendEmail = async ({ to, subject, text, html }) => {
   if (!isEmailServiceConfigured()) {
     throw new ApiError(
       503,
-      'Email service is not configured yet. Add SMTP settings to backend/.env before using forgot password.'
+      'Email service is not configured on the server. Add real SMTP settings in Railway before using forgot password.'
     );
   }
 
