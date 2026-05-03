@@ -39,6 +39,14 @@ app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
+app.get('/', (_req, res) => {
+  res.status(200).json({
+    success: true,
+    message: 'Clinic Appointment System API is running',
+    health: '/api/health',
+  });
+});
+
 app.get('/api/health', (_req, res) => {
   res.status(200).json({
     success: true,
