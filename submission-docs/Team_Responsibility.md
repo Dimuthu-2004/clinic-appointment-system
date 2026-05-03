@@ -9,10 +9,9 @@
 
 ### IT24103228 - Fonseka N.H.D.K
 
-- Led project integration and full-stack coordination
-- Implemented backend deployment flow and environment configuration
-- Worked on authentication, billing, payment integration, and backend API structure
-- Coordinated final testing and hosted backend connectivity
+- Contributed to user management features
+- Worked on drug inventory management flows
+- Supported integration of role-based user handling with the pharmacy-related module
 
 ### IT24104107 - Dilsha W.K.C
 
@@ -28,22 +27,22 @@
 
 ### IT24103073 - Vithusa K
 
-- Contributed to prescription and pharmacy-related features
-- Worked on prescription forms, medicine handling, and inventory-related flows
-- Helped align pharmacy functions with appointment and treatment data
+- Contributed to the digital prescription module
+- Worked on prescription forms, medication entry, and prescription status handling
+- Helped align prescription data with appointment and treatment records
 
 ### IT24101175 - Premarathne H.M.H.S
 
-- Contributed to patient communication modules
-- Worked on alerts, feedback/reviews, and supporting UI interactions
-- Assisted with feature testing and usability review
+- Contributed to patient awareness and alert features
+- Worked on alert targeting, alert messages, and patient communication flows
+- Assisted with validation of awareness-related user interactions
 
 ### IT24102346 - Dewanarayana S.D.W
 
-- Contributed to documentation and project quality assurance
-- Worked on data-model understanding, API documentation support, and submission preparation
-- Assisted with validation of project structure and final deliverables
+- Contributed to feedback management features
+- Worked on review and feedback handling flows
+- Assisted with organizing user feedback presentation and related validations
 
 ## Team Collaboration Summary
 
-The project was completed as a collaborative full-stack assignment. Core work was divided by module, while integration, testing, debugging, and final deployment were handled collectively to ensure the mobile app, backend API, database, and hosted environment worked together as one system.
+The project was completed as a collaborative assignment with responsibilities divided by module. Each member was assigned a functional area of the system, and the final product was integrated into one mobile and backend solution for clinic operations.
