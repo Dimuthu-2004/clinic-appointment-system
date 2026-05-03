@@ -20,9 +20,12 @@ Do not use `http://localhost:5000/api` or a LAN IP for the final demo build.
 
 1. Push this repository to GitHub.
 2. In Railway, create a new project from the repository.
-3. Set the Railway root directory to `backend`.
-4. Railway will use `railway.json` and start the API with `npm start`.
-5. Add these Railway environment variables before the first deploy:
+3. Earlier, we deployed only the backend service. The intended setup is still `backend` as the Railway root directory.
+4. The repository root now also includes a Railway entrypoint, so if you forget to set the root directory Railway can still boot the backend API from the project root.
+5. Use either of these Railway setups:
+   - Preferred: set the Railway root directory to `backend`
+   - Fallback: leave the Railway root directory as the repository root and Railway will start the backend through the root `package.json`
+6. Add these Railway environment variables before the first deploy:
    - `NODE_ENV=production`
    - `MONGO_URI`: MongoDB Atlas connection string
    - `JWT_SECRET`: long random secret
@@ -53,7 +56,7 @@ Do not use `http://localhost:5000/api` or a LAN IP for the final demo build.
 
 > Note: Railway automatically provides `PORT` for the deployed service. Do not manually define `PORT` in Railway environment variables unless you know the platform expects a fixed port.
 
-6. After Railway finishes deploying, open:
+7. After Railway finishes deploying, open:
 
 ```text
 https://your-smart-clinic-api.up.railway.app/api/health
@@ -122,4 +125,5 @@ The `preview` profile produces an internal APK, which is usually the simplest op
 ## Notes
 
 - If you change the Railway public domain, update both `SERVER_PUBLIC_URL` and `EXPO_PUBLIC_API_URL` before rebuilding the mobile app.
+- If Railway shows `502 Application failed to respond`, first confirm the deploy is using either the `backend` root directory or the repository root with the new root-level `railway.json` and `package.json`.
 - Uploaded files are stored in the backend `uploads` folder. On many hosted platforms, local filesystem storage is not ideal long term. For a production version, use cloud storage such as S3 or Cloudinary for drug photos and attachments.
