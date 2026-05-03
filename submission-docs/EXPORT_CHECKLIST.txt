@@ -1,0 +1,18 @@
+Create the final ZIP with this structure:
+
+SE2020_Group_WD.AI.02.01_Submission
+|
+|-- Problem_Statement.pdf
+|-- System_Architecture_Diagram.png  (export from System_Architecture_Diagram.puml)
+|-- Database_Schema_Diagram.png      (export from Database_Schema_Diagram.puml)
+|-- API_Endpoint_Table.pdf
+|-- Team_Responsibility.pdf
+|-- README.txt
+
+Suggested workflow:
+1. Export `Problem_Statement.md` to `Problem_Statement.pdf`
+2. Export `API_Endpoint_Table.md` to `API_Endpoint_Table.pdf`
+3. Export `Team_Responsibility.md` to `Team_Responsibility.pdf`
+4. Render both `.puml` files into `.png` or `.pdf`
+5. Copy `README.txt` as-is
+6. Zip only those final documentation files

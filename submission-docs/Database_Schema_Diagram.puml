@@ -1,0 +1,171 @@
+@startuml
+title Smart Clinic Database Schema
+hide methods
+hide stereotypes
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+
+entity User {
+  * _id : ObjectId
+  --
+  firstName : String
+  lastName : String
+  email : String
+  recoveryEmail : String
+  password : String
+  role : String
+  phone : String
+  address : String
+  gender : String
+  dateOfBirth : Date
+  specialization : String
+  nic : String
+  slmcRegistrationNumber : String
+  emailVerified : Boolean
+}
+
+entity Appointment {
+  * _id : ObjectId
+  --
+  patient : ObjectId
+  doctor : ObjectId
+  appointmentDate : Date
+  appointmentSession : String
+  tokenNumber : Number
+  reason : String
+  status : String
+}
+
+entity Billing {
+  * _id : ObjectId
+  --
+  appointment : ObjectId
+  patient : ObjectId
+  doctor : ObjectId
+  amount : Number
+  currency : String
+  status : String
+  paymentMethod : String
+  paypalOrderId : String
+  paidAt : Date
+}
+
+entity MedicalRecord {
+  * _id : ObjectId
+  --
+  patient : ObjectId
+  doctor : ObjectId
+  appointment : ObjectId
+  diagnosis : String
+  symptoms : String
+  treatmentPlan : String
+  isArchived : Boolean
+}
+
+entity Prescription {
+  * _id : ObjectId
+  --
+  patient : ObjectId
+  doctor : ObjectId
+  appointment : ObjectId
+  medications : Array
+  notes : String
+  status : String
+}
+
+entity Drug {
+  * _id : ObjectId
+  --
+  name : String
+  genericName : String
+  category : String
+  quantityInStock : Number
+  unitPrice : Number
+  expiryDate : Date
+  isActive : Boolean
+}
+
+entity Alert {
+  * _id : ObjectId
+  --
+  createdBy : ObjectId
+  targetedPatients : Array
+  title : String
+  message : String
+  sendToAll : Boolean
+  sendEmailNotifications : Boolean
+  status : String
+}
+
+entity Review {
+  * _id : ObjectId
+  --
+  patient : ObjectId
+  doctor : ObjectId
+  appointment : ObjectId
+  rating : Number
+  comment : String
+  adminReply : String
+}
+
+entity Notification {
+  * _id : ObjectId
+  --
+  recipient : ObjectId
+  createdBy : ObjectId
+  type : String
+  title : String
+  message : String
+  entityModel : String
+  entityId : ObjectId
+  isRead : Boolean
+}
+
+entity DoctorAvailability {
+  * _id : ObjectId
+  --
+  doctor : ObjectId
+  dateKey : String
+  sessionScope : String
+  availability : String
+  updatedBy : ObjectId
+}
+
+entity AppSettings {
+  * _id : ObjectId
+  --
+  clinicSchedule : Object
+  appointmentFee : Object
+}
+
+User ||--o{ Appointment : patient
+User ||--o{ Appointment : doctor
+User ||--o{ Billing : patient
+User ||--o{ Billing : doctor
+User ||--o{ MedicalRecord : patient
+User ||--o{ MedicalRecord : doctor
+User ||--o{ Prescription : patient
+User ||--o{ Prescription : doctor
+User ||--o{ Review : patient
+User ||--o{ Review : doctor
+User ||--o{ Alert : createdBy
+User ||--o{ Notification : recipient
+User ||--o{ Notification : createdBy
+User ||--o{ DoctorAvailability : doctor
+User ||--o{ DoctorAvailability : updatedBy
+
+Appointment ||--o| Billing : generates
+Appointment ||--o| MedicalRecord : produces
+Appointment ||--o| Prescription : results_in
+Appointment ||--o| Review : reviewed_by_patient
+
+Alert }o--o{ User : targets_patients
+Notification }o--|| Appointment : may_reference
+Notification }o--|| Billing : may_reference
+Notification }o--|| Review : may_reference
+
+note bottom of AppSettings
+Single configuration document for
+clinic schedule and appointment fee
+end note
+@enduml

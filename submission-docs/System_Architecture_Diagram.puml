@@ -1,0 +1,71 @@
+@startuml
+title Smart Clinic System Architecture
+skinparam componentStyle rectangle
+skinparam shadowing false
+skinparam packageStyle rectangle
+
+actor Patient
+actor Doctor
+actor "Finance Manager" as Finance
+actor Pharmacist
+actor Admin
+
+rectangle "Mobile App (Expo React Native)" as Mobile {
+  component "Authentication UI"
+  component "Appointment Module"
+  component "Billing Module"
+  component "Medical Records Module"
+  component "Prescription Module"
+  component "Drug Inventory Module"
+  component "Alerts / Reviews / Notifications"
+}
+
+rectangle "Backend API (Node.js + Express)" as Backend {
+  component "Auth Controller"
+  component "Appointment Controller"
+  component "Billing & Payment Controller"
+  component "Medical Record Controller"
+  component "Prescription Controller"
+  component "Drug Controller"
+  component "Alert / Review / Notification Controller"
+  component "Validation & Middleware"
+}
+
+database "MongoDB Atlas" as DB
+cloud "Railway Deployment" as Railway
+cloud "PayPal API" as PayPal
+cloud "SMTP Email Service (Gmail)" as SMTP
+cloud "Expo Push / EAS" as Expo
+
+Patient --> Mobile
+Doctor --> Mobile
+Finance --> Mobile
+Pharmacist --> Mobile
+Admin --> Mobile
+
+Mobile --> Railway : HTTPS requests
+Railway --> Backend : hosts API
+Backend --> DB : CRUD / queries
+Backend --> PayPal : payment auth + order capture
+Backend --> SMTP : password reset emails
+Backend --> Expo : push notification delivery
+
+note right of Mobile
+Uses JWT authentication
+Consumes REST API endpoints
+Runs on Android preview APK
+end note
+
+note right of Backend
+Role-based authorization
+Validation middleware
+Business logic per module
+end note
+
+note bottom of DB
+Stores users, appointments, billing,
+medical records, prescriptions,
+drugs, alerts, reviews, notifications,
+availability, and clinic settings
+end note
+@enduml

@@ -37,6 +37,12 @@ const hashPasswordResetCode = (value) =>
 
 const buildPasswordResetCode = () => String(crypto.randomInt(100000, 1000000));
 
+const buildPasswordResetDeliveryTargets = (user) =>
+  [user?.recoveryEmail, user?.email]
+    .map((value) => String(value || '').trim().toLowerCase())
+    .filter(Boolean)
+    .filter((value, index, list) => list.indexOf(value) === index);
+
 const clearPasswordResetState = (user) => {
   user.passwordResetCodeHash = '';
   user.passwordResetExpiresAt = null;
@@ -175,21 +181,21 @@ const requestPasswordReset = asyncHandler(async (req, res) => {
 
   const resetCode = buildPasswordResetCode();
   const expiresInMinutes = getPasswordResetExpiryMinutes();
-  const deliveryEmail = String(user.recoveryEmail || user.email || '').trim().toLowerCase();
+  const deliveryTargets = buildPasswordResetDeliveryTargets(user);
 
   user.passwordResetCodeHash = hashPasswordResetCode(resetCode);
   user.passwordResetExpiresAt = new Date(Date.now() + expiresInMinutes * 60 * 1000);
   await user.save({ validateBeforeSave: false });
 
   await sendPasswordResetEmail({
-    to: deliveryEmail,
+    to: deliveryTargets,
     firstName: user.firstName,
     resetCode,
     expiresInMinutes,
   });
 
   if (process.env.NODE_ENV !== 'production') {
-    console.info(`[auth] Password reset code email sent to: ${deliveryEmail} for account ${user.email}`);
+    console.info(`[auth] Password reset code email sent to: ${deliveryTargets.join(', ')} for account ${user.email}`);
   }
 
   res.status(200).json({
