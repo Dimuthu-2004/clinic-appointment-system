@@ -8,7 +8,8 @@
       "distribution": "internal",
       "environment": "preview",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://just-rebirth-production-52bb.up.railway.app/api"
+        "EXPO_PUBLIC_API_URL": "https://just-rebirth-production-52bb.up.railway.app/api",
+        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "657200415157-qfu4hvu20r3th93go0ftpo9g4pc7l4h7.apps.googleusercontent.com"
       },
       "android": {
         "buildType": "apk"
@@ -17,7 +18,8 @@
     "production": {
       "environment": "production",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://just-rebirth-production-52bb.up.railway.app/api"
+        "EXPO_PUBLIC_API_URL": "https://just-rebirth-production-52bb.up.railway.app/api",
+        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "657200415157-qfu4hvu20r3th93go0ftpo9g4pc7l4h7.apps.googleusercontent.com"
       },
       "autoIncrement": true
     }
