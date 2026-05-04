@@ -9,6 +9,7 @@ import LoadingOverlay from '../components/LoadingOverlay';
 import ScreenContainer from '../components/ScreenContainer';
 import { useAuth } from '../hooks/useAuth';
 import { colors, radii, spacing, useTheme } from '../theme';
+import { openPrescriptionPdf } from '../utils/prescriptions';
 import { formatCurrency, formatDateTime } from '../utils/date';
 
 const createMedication = () => ({
@@ -414,6 +415,11 @@ export default function PrescriptionFormScreen({ navigation, route }) {
         ) : existingPrescription ? (
           <View style={styles.actions}>
             <AppButton loading={availabilityLoading} onPress={handleCheckAvailability} title="Check availability" />
+            <AppButton
+              onPress={() => openPrescriptionPdf(existingPrescription._id)}
+              title="Download prescription PDF"
+              variant="secondary"
+            />
           </View>
         ) : null}
 

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Alert, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useIsFocused } from '@react-navigation/native';
+import { useIsFocused, useNavigation } from '@react-navigation/native';
 import api from '../api/client';
 import AppButton from '../components/AppButton';
 import EmptyState from '../components/EmptyState';
@@ -10,9 +10,11 @@ import LoadingOverlay from '../components/LoadingOverlay';
 import ScreenContainer from '../components/ScreenContainer';
 import { colors, spacing, useTheme } from '../theme';
 import { openBillingInvoice } from '../utils/billing';
+import { openPrescriptionPdf } from '../utils/prescriptions';
 import { formatDateTime } from '../utils/date';
 
 export default function NotificationListScreen() {
+  const navigation = useNavigation();
   const isFocused = useIsFocused();
   const { colors: themeColors } = useTheme();
   const [notifications, setNotifications] = useState([]);
@@ -51,6 +53,10 @@ export default function NotificationListScreen() {
       } catch (_error) {
         // Keep the feed usable even if marking read fails.
       }
+    }
+
+    if (notification.metadata?.prescriptionId) {
+      navigation.navigate('PrescriptionList');
     }
   };
 
@@ -129,6 +135,13 @@ export default function NotificationListScreen() {
                   <AppButton
                     onPress={() => openBillingInvoice(notification.metadata.billingId)}
                     title="Download bill PDF"
+                    variant="secondary"
+                  />
+                ) : null}
+                {notification.metadata?.prescriptionId ? (
+                  <AppButton
+                    onPress={() => openPrescriptionPdf(notification.metadata.prescriptionId)}
+                    title="Download prescription PDF"
                     variant="secondary"
                   />
                 ) : null}

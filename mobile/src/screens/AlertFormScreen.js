@@ -10,11 +10,9 @@ import { useAuth } from '../hooks/useAuth';
 import { colors, radii, spacing, useTheme } from '../theme';
 import { formatDateTime } from '../utils/date';
 
-const buildTargetingKey = ({ sendToAll, minAge, maxAge, targetCondition }) =>
+const buildTargetingKey = ({ sendToAll, targetCondition }) =>
   JSON.stringify({
     sendToAll: Boolean(sendToAll),
-    minAge: String(minAge || '').trim(),
-    maxAge: String(maxAge || '').trim(),
     targetCondition: String(targetCondition || '').trim().toLowerCase(),
   });
 
@@ -39,16 +37,6 @@ export default function AlertFormScreen({ navigation, route }) {
     existingAlert && !existingSendToAll
       ? buildTargetingKey({
           sendToAll: existingSendToAll,
-          minAge:
-            existingAlert?.minAge === null || existingAlert?.minAge === undefined
-              ? existingAlert?.ageLimit === null || existingAlert?.ageLimit === undefined
-                ? ''
-                : String(existingAlert.ageLimit)
-              : String(existingAlert.minAge),
-          maxAge:
-            existingAlert?.maxAge === null || existingAlert?.maxAge === undefined
-              ? ''
-              : String(existingAlert.maxAge),
           targetCondition: existingAlert?.targetCondition || '',
         })
       : ''
@@ -59,22 +47,12 @@ export default function AlertFormScreen({ navigation, route }) {
   const [form, setForm] = useState({
     title: existingAlert?.title || '',
     message: existingAlert?.message || '',
-    minAge:
-      existingAlert?.minAge === null || existingAlert?.minAge === undefined
-        ? existingAlert?.ageLimit === null || existingAlert?.ageLimit === undefined
-          ? ''
-          : String(existingAlert.ageLimit)
-        : String(existingAlert.minAge),
-    maxAge: existingAlert?.maxAge === null || existingAlert?.maxAge === undefined ? '' : String(existingAlert.maxAge),
     targetCondition: existingAlert?.targetCondition || '',
     sendToAll: Boolean(existingSendToAll),
     sendEmailNotifications: Boolean(existingAlert?.sendEmailNotifications),
   });
 
-  const currentTargetingKey = useMemo(
-    () => buildTargetingKey(form),
-    [form]
-  );
+  const currentTargetingKey = useMemo(() => buildTargetingKey(form), [form]);
 
   const filteredPreviewPatients = useMemo(() => {
     const search = patientSearch.trim().toLowerCase();
@@ -93,8 +71,7 @@ export default function AlertFormScreen({ navigation, route }) {
     );
   }, [patientSearch, previewPatients]);
 
-  const hasTargetingFilters = () =>
-    form.minAge !== '' || form.maxAge !== '' || form.targetCondition.trim().length > 0;
+  const hasTargetingFilters = () => form.targetCondition.trim().length > 0;
 
   const resetPreviewState = ({ clearPatients = false } = {}) => {
     setPreviewKey('');
@@ -110,8 +87,6 @@ export default function AlertFormScreen({ navigation, route }) {
     resetPreviewState({ clearPatients: true });
     setErrors((current) => ({
       ...current,
-      minAge: undefined,
-      maxAge: undefined,
       targetCondition: undefined,
       selectedPatients: undefined,
     }));
@@ -119,24 +94,9 @@ export default function AlertFormScreen({ navigation, route }) {
 
   const validateTargeting = () => {
     const nextErrors = {};
-    const minAge = form.minAge === '' ? null : Number(form.minAge);
-    const maxAge = form.maxAge === '' ? null : Number(form.maxAge);
-
-    if (form.minAge !== '' && (!Number.isFinite(minAge) || minAge < 0)) {
-      nextErrors.minAge = 'Minimum age cannot be negative';
-    }
-
-    if (form.maxAge !== '' && (!Number.isFinite(maxAge) || maxAge <= 0 || maxAge > 120)) {
-      nextErrors.maxAge = 'Maximum age must be between 1 and 120';
-    }
-
-    if (minAge !== null && maxAge !== null && minAge >= maxAge) {
-      nextErrors.minAge = 'Minimum age must be less than maximum age';
-      nextErrors.maxAge = 'Maximum age must be greater than minimum age';
-    }
 
     if (!form.sendToAll && !hasTargetingFilters()) {
-      nextErrors.targetCondition = 'Add an age limit or target condition, or select Send to all users.';
+      nextErrors.targetCondition = 'Add a target condition, or select Send to all users.';
     }
 
     if (!form.sendToAll && previewKey !== currentTargetingKey) {
@@ -155,7 +115,7 @@ export default function AlertFormScreen({ navigation, route }) {
 
     delete nextErrors.selectedPatients;
 
-    if (nextErrors.targetCondition || nextErrors.minAge || nextErrors.maxAge) {
+    if (nextErrors.targetCondition) {
       setErrors(nextErrors);
       Alert.alert('Invalid values', 'Please correct the highlighted fields before previewing patients.');
       return;
@@ -168,8 +128,8 @@ export default function AlertFormScreen({ navigation, route }) {
         selectedPatients: undefined,
       }));
       const response = await api.post('/alerts/preview-targets', {
-        minAge: form.minAge === '' ? '' : Number(form.minAge),
-        maxAge: form.maxAge === '' ? '' : Number(form.maxAge),
+        minAge: '',
+        maxAge: '',
         targetCondition: form.targetCondition.trim(),
         sendToAll: false,
       });
@@ -217,8 +177,8 @@ export default function AlertFormScreen({ navigation, route }) {
       const payload = {
         title: form.title.trim(),
         message: form.message.trim(),
-        minAge: form.sendToAll || form.minAge === '' ? '' : Number(form.minAge),
-        maxAge: form.sendToAll || form.maxAge === '' ? '' : Number(form.maxAge),
+        minAge: '',
+        maxAge: '',
         targetCondition: form.sendToAll ? '' : form.targetCondition.trim(),
         sendToAll: form.sendToAll,
         sendEmailNotifications: form.sendEmailNotifications,
@@ -274,9 +234,6 @@ export default function AlertFormScreen({ navigation, route }) {
                 Audience: {form.sendToAll ? 'All users' : 'Targeted users'}
               </Text>
               <Text style={[styles.readonlyText, { color: themeColors.text }]}>
-                Age range: {form.sendToAll ? 'All ages' : form.minAge || form.maxAge ? `${form.minAge || 'Any'} - ${form.maxAge || 'Any'}` : 'All ages'}
-              </Text>
-              <Text style={[styles.readonlyText, { color: themeColors.text }]}>
                 Target condition: {form.sendToAll ? 'All users' : form.targetCondition || 'All patients'}
               </Text>
               <Text style={[styles.readonlyText, { color: themeColors.text }]}>
@@ -306,15 +263,13 @@ export default function AlertFormScreen({ navigation, route }) {
 
               <ToggleCard
                 checked={form.sendToAll}
-                hint="Check this to publish the alert to every patient. Leave it unchecked to use age limits or a target condition."
+                hint="Check this to publish the alert to every patient. Leave it unchecked to use a target condition."
                 onPress={() => {
                   const nextSendToAll = !form.sendToAll;
                   updateTargeting({
                     sendToAll: nextSendToAll,
                     ...(nextSendToAll
                       ? {
-                          minAge: '',
-                          maxAge: '',
                           targetCondition: '',
                         }
                       : {}),
@@ -337,24 +292,6 @@ export default function AlertFormScreen({ navigation, route }) {
                 title="Send email notifications too"
               />
 
-              <AppInput
-                editable={canEdit && !form.sendToAll}
-                error={errors.minAge}
-                keyboardType="numeric"
-                label="Minimum age (optional)"
-                onChangeText={(minAge) => updateTargeting({ minAge })}
-                placeholder={form.sendToAll ? 'Disabled while sending to all users' : 'Example: 18'}
-                value={form.minAge}
-              />
-              <AppInput
-                editable={canEdit && !form.sendToAll}
-                error={errors.maxAge}
-                keyboardType="numeric"
-                label="Maximum age (optional)"
-                onChangeText={(maxAge) => updateTargeting({ maxAge })}
-                placeholder={form.sendToAll ? 'Disabled while sending to all users' : 'Example: 65'}
-                value={form.maxAge}
-              />
               <AppInput
                 editable={canEdit && !form.sendToAll}
                 error={errors.targetCondition}
@@ -401,10 +338,6 @@ export default function AlertFormScreen({ navigation, route }) {
                       {filteredPreviewPatients.map((patient) => {
                         const patientId = String(patient._id);
                         const isSelected = selectedPatientIds.includes(patientId);
-                        const ageLabel =
-                          patient.calculatedAge === null || patient.calculatedAge === undefined
-                            ? 'Age not available'
-                            : `${patient.calculatedAge} years`;
 
                         return (
                           <Pressable
@@ -424,7 +357,6 @@ export default function AlertFormScreen({ navigation, route }) {
                               <Text style={[styles.patientMeta, { color: themeColors.textMuted }]}>
                                 {patient.recoveryEmail || patient.email || 'No email'} {patient.phone ? `| ${patient.phone}` : ''}
                               </Text>
-                              <Text style={[styles.patientMeta, { color: themeColors.textMuted }]}>{ageLabel}</Text>
                             </View>
                           </Pressable>
                         );
@@ -432,7 +364,7 @@ export default function AlertFormScreen({ navigation, route }) {
                     </>
                   ) : (
                     <EmptyState
-                      message="No preview results yet. Add a target condition or age range, then preview patients."
+                      message="No preview results yet. Add a target condition, then preview patients."
                       title="No preview loaded"
                     />
                   )}

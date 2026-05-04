@@ -209,9 +209,15 @@ export function AuthProvider({ children }) {
   };
 
   const requestPasswordReset = async (email) => {
-    await api.post('/auth/forgot-password', {
-      email: String(email || '').trim().toLowerCase(),
-    });
+    await api.post(
+      '/auth/forgot-password',
+      {
+        email: String(email || '').trim().toLowerCase(),
+      },
+      {
+        timeout: 30000,
+      }
+    );
   };
 
   const resetPassword = async ({ email, resetCode, password }) => {

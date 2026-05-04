@@ -23,9 +23,10 @@ const getTransporter = () =>
     host: normalizeEnvValue(process.env.SMTP_HOST),
     port: Number(normalizeEnvValue(process.env.SMTP_PORT) || 587),
     secure: parseBoolean(process.env.SMTP_SECURE),
-    connectionTimeout: 8000,
-    greetingTimeout: 8000,
-    socketTimeout: 10000,
+    connectionTimeout: 15000,
+    greetingTimeout: 15000,
+    socketTimeout: 20000,
+    requireTLS: !parseBoolean(process.env.SMTP_SECURE),
     auth: {
       user: normalizeEnvValue(process.env.SMTP_USER),
       pass: normalizeSmtpPassword(process.env.SMTP_PASS),
@@ -39,6 +40,12 @@ const getFromAddress = () => {
   return name ? `"${name.replace(/"/g, '\\"')}" <${address}>` : address;
 };
 
+const normalizeRecipients = (value) =>
+  (Array.isArray(value) ? value : [value])
+    .map((item) => normalizeEnvValue(item).toLowerCase())
+    .filter(Boolean)
+    .filter((item, index, list) => list.indexOf(item) === index);
+
 const sendEmail = async ({ to, subject, text, html }) => {
   if (!isEmailServiceConfigured()) {
     throw new ApiError(
@@ -47,15 +54,32 @@ const sendEmail = async ({ to, subject, text, html }) => {
     );
   }
 
+  const recipients = normalizeRecipients(to);
+
+  if (!recipients.length) {
+    throw new ApiError(422, 'A valid email recipient is required');
+  }
+
   try {
     const transporter = getTransporter();
-    await transporter.sendMail({
-      from: getFromAddress(),
-      to,
-      subject,
-      text,
-      html,
-    });
+    const deliveryResults = await Promise.allSettled(
+      recipients.map((recipient) =>
+        transporter.sendMail({
+          from: getFromAddress(),
+          to: recipient,
+          subject,
+          text,
+          html,
+        })
+      )
+    );
+
+    const deliveredCount = deliveryResults.filter((result) => result.status === 'fulfilled').length;
+
+    if (!deliveredCount) {
+      const firstError = deliveryResults.find((result) => result.status === 'rejected');
+      throw firstError?.reason || new Error('Email delivery failed');
+    }
   } catch (error) {
     const smtpMessage = error?.message ? ` (${error.message})` : '';
     throw new ApiError(502, `Unable to send the password reset email right now${smtpMessage}`);
