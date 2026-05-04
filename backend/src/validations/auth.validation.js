@@ -51,6 +51,10 @@ const loginValidation = [
   body('password').notEmpty().withMessage('Password is required'),
 ];
 
+const googleLoginValidation = [
+  body('idToken').trim().notEmpty().withMessage('Google ID token is required'),
+];
+
 const requestPasswordResetValidation = [body('email').isEmail().withMessage('A valid email is required')];
 
 const resetPasswordValidation = [
@@ -95,6 +99,7 @@ module.exports = {
   doctorRegisterValidation,
   staffRegisterValidation,
   loginValidation,
+  googleLoginValidation,
   requestPasswordResetValidation,
   resetPasswordValidation,
   updateProfileValidation,

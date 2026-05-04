@@ -21,6 +21,11 @@ const userSchema = new mongoose.Schema(
       lowercase: true,
       trim: true,
     },
+    googleId: {
+      type: String,
+      trim: true,
+      default: undefined,
+    },
     recoveryEmail: {
       type: String,
       lowercase: true,
@@ -151,6 +156,16 @@ const userSchema = new mongoose.Schema(
 userSchema.virtual('fullName').get(function fullName() {
   return `${this.firstName} ${this.lastName}`;
 });
+
+userSchema.index(
+  { googleId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      googleId: { $type: 'string' },
+    },
+  }
+);
 
 userSchema.index(
   { recoveryEmail: 1 },

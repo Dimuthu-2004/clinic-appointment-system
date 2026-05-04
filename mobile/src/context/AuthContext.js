@@ -158,6 +158,13 @@ export function AuthProvider({ children }) {
     await persistSession(response.data.data);
   };
 
+  const signInWithGoogle = async (idToken) => {
+    const response = await api.post('/auth/google', {
+      idToken,
+    });
+    await persistSession(response.data.data);
+  };
+
   const signUp = async (registrationType, values) => {
     const endpointMap = {
       patient: '/auth/register/patient',
@@ -238,6 +245,7 @@ export function AuthProvider({ children }) {
         pendingAppointmentBooking,
         postAuthDestination,
         signIn,
+        signInWithGoogle,
         signUp,
         signOut,
         refreshProfile,

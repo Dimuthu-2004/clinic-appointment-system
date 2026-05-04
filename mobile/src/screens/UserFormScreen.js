@@ -114,7 +114,7 @@ export default function UserFormScreen({ navigation, route }) {
 
     Alert.alert(
       `Delete ${displayName}?`,
-      'This will permanently remove the account. Existing appointments, bills, reviews, and records linked to this user may remain for audit history, but the user will no longer be able to log in.',
+      'Are you sure you want to permanently remove this account? Existing appointments, bills, reviews, and records linked to this user may remain for audit history, but the user will no longer be able to log in.',
       [
       { text: 'Cancel', style: 'cancel' },
       {
@@ -138,7 +138,7 @@ export default function UserFormScreen({ navigation, route }) {
         <Text style={[styles.title, { color: themeColors.text }]}>{isEditing ? 'User details' : 'Registration only'}</Text>
         <Text style={[styles.subtitle, { color: themeColors.textMuted }]}>
           {isEditing
-            ? 'Review this account and remove it if needed.'
+            ? 'Review this account and remove it if needed. Deleting always asks for confirmation first.'
             : 'New accounts are created from the registration screen.'}
         </Text>
 

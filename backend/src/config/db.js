@@ -50,6 +50,17 @@ const ensureUserCollectionState = async () => {
   }
 
   await collection.createIndex(
+    { googleId: 1 },
+    {
+      unique: true,
+      partialFilterExpression: {
+        googleId: { $type: 'string' },
+      },
+      name: 'googleId_1',
+    }
+  );
+
+  await collection.createIndex(
     { nic: 1 },
     {
       unique: true,

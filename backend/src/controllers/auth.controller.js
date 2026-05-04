@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
+const { OAuth2Client } = require('google-auth-library');
 const User = require('../models/User');
 const ApiError = require('../utils/ApiError');
 const asyncHandler = require('../utils/asyncHandler');
@@ -11,6 +12,8 @@ const {
   normalizeOptionalSlmcRegistrationNumber,
   normalizeSpecialization,
 } = require('../utils/validation');
+
+const googleAuthClient = new OAuth2Client();
 
 const buildAuthResponse = (user) => {
   const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
@@ -36,6 +39,7 @@ const hashPasswordResetCode = (value) =>
   crypto.createHash('sha256').update(String(value || '')).digest('hex');
 
 const buildPasswordResetCode = () => String(crypto.randomInt(100000, 1000000));
+const buildGooglePlaceholderPassword = () => crypto.randomBytes(32).toString('hex');
 
 const buildPasswordResetDeliveryTargets = (user) =>
   [user?.recoveryEmail, user?.email]
@@ -101,6 +105,94 @@ const createUserAccount = async (payload) => {
   return User.create(normalizedPayload);
 };
 
+const parseConfiguredGoogleClientIds = () =>
+  [
+    process.env.GOOGLE_ANDROID_CLIENT_ID,
+    process.env.GOOGLE_IOS_CLIENT_ID,
+    process.env.GOOGLE_WEB_CLIENT_ID,
+    ...String(process.env.GOOGLE_CLIENT_IDS || '')
+      .split(',')
+      .map((value) => value.trim()),
+  ]
+    .filter(Boolean)
+    .filter((value, index, list) => list.indexOf(value) === index);
+
+const splitGoogleDisplayName = ({ email, fullName, givenName, familyName }) => {
+  const normalizedGivenName = String(givenName || '').trim();
+  const normalizedFamilyName = String(familyName || '').trim();
+
+  if (normalizedGivenName && normalizedFamilyName) {
+    return {
+      firstName: normalizedGivenName,
+      lastName: normalizedFamilyName,
+    };
+  }
+
+  const normalizedFullName = String(fullName || '').trim();
+
+  if (normalizedFullName) {
+    const [firstName, ...remainingParts] = normalizedFullName.split(/\s+/);
+
+    return {
+      firstName,
+      lastName: remainingParts.join(' ').trim() || 'Google User',
+    };
+  }
+
+  const fallbackName = String(email || '')
+    .split('@')[0]
+    .replace(/[._-]+/g, ' ')
+    .trim();
+  const [firstName, ...remainingParts] = fallbackName.split(/\s+/).filter(Boolean);
+
+  return {
+    firstName: firstName || 'Google',
+    lastName: remainingParts.join(' ').trim() || 'User',
+  };
+};
+
+const verifyGoogleIdToken = async (idToken) => {
+  const audiences = parseConfiguredGoogleClientIds();
+
+  if (!audiences.length) {
+    throw new ApiError(
+      503,
+      'Google sign-in is not configured. Add GOOGLE_ANDROID_CLIENT_ID and the matching mobile env value first.'
+    );
+  }
+
+  let ticket;
+
+  try {
+    ticket = await googleAuthClient.verifyIdToken({
+      idToken,
+      audience: audiences,
+    });
+  } catch (_error) {
+    throw new ApiError(401, 'Google sign-in could not be verified');
+  }
+
+  const payload = ticket.getPayload();
+  const googleId = String(payload?.sub || '').trim();
+  const email = String(payload?.email || '')
+    .trim()
+    .toLowerCase();
+  const emailVerified = payload?.email_verified === true || payload?.email_verified === 'true';
+
+  if (!googleId || !email || !emailVerified) {
+    throw new ApiError(401, 'Google sign-in did not return a verified email address');
+  }
+
+  return {
+    googleId,
+    email,
+    emailVerified,
+    name: String(payload?.name || '').trim(),
+    givenName: String(payload?.given_name || '').trim(),
+    familyName: String(payload?.family_name || '').trim(),
+  };
+};
+
 const registerPatient = asyncHandler(async (req, res) => {
   const user = await createUserAccount({
     ...req.body,
@@ -157,6 +249,62 @@ const login = asyncHandler(async (req, res) => {
   res.status(200).json({
     success: true,
     message: 'Login successful',
+    data: buildAuthResponse(user),
+  });
+});
+
+const googleLogin = asyncHandler(async (req, res) => {
+  const googleProfile = await verifyGoogleIdToken(req.body.idToken);
+
+  let user = await User.findOne({
+    $or: [{ googleId: googleProfile.googleId }, { email: googleProfile.email }],
+  });
+
+  if (user) {
+    if (user.role !== USER_ROLES.PATIENT) {
+      throw new ApiError(
+        403,
+        'Google sign-in is only enabled for patient accounts in this app. Please use your usual login method.'
+      );
+    }
+
+    if (user.googleId && user.googleId !== googleProfile.googleId) {
+      throw new ApiError(409, 'This Google account is already linked to another patient account');
+    }
+
+    if (!user.googleId) {
+      user.googleId = googleProfile.googleId;
+      user.emailVerified = true;
+      await user.save();
+    }
+  } else {
+    await ensurePrimaryEmailIsUnique(googleProfile.email);
+
+    const resolvedName = splitGoogleDisplayName({
+      email: googleProfile.email,
+      fullName: googleProfile.name,
+      givenName: googleProfile.givenName,
+      familyName: googleProfile.familyName,
+    });
+
+    user = await createUserAccount({
+      firstName: resolvedName.firstName,
+      lastName: resolvedName.lastName,
+      email: googleProfile.email,
+      password: buildGooglePlaceholderPassword(),
+      phone: '',
+      address: '',
+      role: USER_ROLES.PATIENT,
+      emailVerified: true,
+      googleId: googleProfile.googleId,
+    });
+  }
+
+  await stampLastLogin(user);
+
+  res.status(200).json({
+    success: true,
+    message: 'Google sign-in successful',
     data: buildAuthResponse(user),
   });
 });
@@ -302,6 +450,7 @@ module.exports = {
   requestPasswordReset,
   resetPassword,
   login,
+  googleLogin,
   registerPatient,
   registerDoctor,
   registerStaff,

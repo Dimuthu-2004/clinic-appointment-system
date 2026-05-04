@@ -2,6 +2,7 @@
   "expo": {
     "name": "Clinic Appointment System",
     "slug": "clinic-appointment-system-mobile",
+    "scheme": "clinicappointment",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",

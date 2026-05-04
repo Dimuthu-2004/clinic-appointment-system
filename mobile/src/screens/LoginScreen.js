@@ -1,5 +1,9 @@
-import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import Constants, { ExecutionEnvironment } from 'expo-constants';
+import * as AuthSession from 'expo-auth-session';
+import * as Google from 'expo-auth-session/providers/google';
+import * as WebBrowser from 'expo-web-browser';
 import { LinearGradient } from 'expo-linear-gradient';
 import AppButton from '../components/AppButton';
 import AppInput from '../components/AppInput';
@@ -7,12 +11,96 @@ import ScreenContainer from '../components/ScreenContainer';
 import { useAuth } from '../hooks/useAuth';
 import { colors, radii, spacing, useTheme } from '../theme';
 
+WebBrowser.maybeCompleteAuthSession();
+
+const isRunningInExpoGo = () =>
+  Constants.executionEnvironment === ExecutionEnvironment.StoreClient ||
+  Constants.appOwnership === 'expo';
+
 export default function LoginScreen({ navigation }) {
   const { colors: themeColors } = useTheme();
-  const { signIn } = useAuth();
+  const { signIn, signInWithGoogle } = useAuth();
   const [form, setForm] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [googleSubmitting, setGoogleSubmitting] = useState(false);
+  const googleClientIds = {
+    androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
+    iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
+    webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
+  };
+  const googleSignInConfigured =
+    (Platform.OS === 'android' && Boolean(googleClientIds.androidClientId)) ||
+    (Platform.OS === 'ios' && Boolean(googleClientIds.iosClientId)) ||
+    (Platform.OS === 'web' && Boolean(googleClientIds.webClientId));
+  const [googleRequest, googleResponse, promptGoogleAsync] = Google.useAuthRequest({
+    ...googleClientIds,
+    responseType: AuthSession.ResponseType.IdToken,
+    scopes: ['openid', 'profile', 'email'],
+    selectAccount: true,
+  });
+
+  useEffect(() => {
+    let isActive = true;
+
+    const handleGoogleResponse = async () => {
+      if (!googleResponse) {
+        return;
+      }
+
+      if (googleResponse.type === 'cancel' || googleResponse.type === 'dismiss') {
+        if (isActive) {
+          setGoogleSubmitting(false);
+        }
+        return;
+      }
+
+      if (googleResponse.type === 'error') {
+        if (isActive) {
+          setGoogleSubmitting(false);
+          setError(googleResponse.params?.error_description || 'Google sign-in failed');
+        }
+        return;
+      }
+
+      if (googleResponse.type !== 'success') {
+        return;
+      }
+
+      const idToken = googleResponse.params?.id_token || googleResponse.authentication?.idToken;
+
+      if (!idToken) {
+        if (isActive) {
+          setGoogleSubmitting(false);
+          setError('Google sign-in did not return an ID token.');
+        }
+        return;
+      }
+
+      try {
+        setError('');
+        await signInWithGoogle(idToken);
+      } catch (submitError) {
+        if (isActive) {
+          setError(
+            submitError?.response?.data?.message ||
+              submitError?.message ||
+              'Google sign-in failed'
+          );
+        }
+      } finally {
+        if (isActive) {
+          setGoogleSubmitting(false);
+        }
+      }
+    };
+
+    handleGoogleResponse();
+
+    return () => {
+      isActive = false;
+    };
+  }, [googleResponse, signInWithGoogle]);
 
   const handleSubmit = async () => {
     if (!form.email || !form.password) {
@@ -32,6 +120,39 @@ export default function LoginScreen({ navigation }) {
       );
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleGoogleSubmit = async () => {
+    if (isRunningInExpoGo()) {
+      setError('Google sign-in requires a development build or APK. Expo Go cannot complete this login.');
+      return;
+    }
+
+    if (!googleSignInConfigured) {
+      setError('Google sign-in is not configured yet. Add the Google client IDs to the mobile env file first.');
+      return;
+    }
+
+    if (!googleRequest) {
+      setError('Google sign-in is still loading. Please try again in a moment.');
+      return;
+    }
+
+    try {
+      setError('');
+      setGoogleSubmitting(true);
+      const result = await promptGoogleAsync();
+
+      if (result.type === 'cancel' || result.type === 'dismiss') {
+        setGoogleSubmitting(false);
+      } else if (result.type === 'error') {
+        setGoogleSubmitting(false);
+        setError(result.params?.error_description || 'Google sign-in failed');
+      }
+    } catch (submitError) {
+      setGoogleSubmitting(false);
+      setError(submitError?.message || 'Google sign-in failed');
     }
   };
 
@@ -69,12 +190,23 @@ export default function LoginScreen({ navigation }) {
         <View style={styles.actions}>
           <AppButton loading={submitting} onPress={handleSubmit} title="Login" />
           <AppButton
+            disabled={submitting}
+            loading={googleSubmitting}
+            onPress={handleGoogleSubmit}
+            title="Continue with Google"
+            variant="outline"
+          />
+          <AppButton
             title="Forgot password"
             variant="secondary"
             onPress={() => navigation.navigate('ForgotPassword', { email: form.email })}
           />
           <AppButton title="Back to home" variant="secondary" onPress={() => navigation.navigate('Landing')} />
         </View>
+
+        <Text style={[styles.helperText, { color: themeColors.textMuted }]}>
+          Google sign-in creates a patient account the first time and lets the patient update the rest of the profile later.
+        </Text>
 
         <Pressable
           onPress={() => navigation.navigate('Register', { registrationType: 'patient' })}
@@ -130,6 +262,12 @@ const styles = StyleSheet.create({
   },
   actions: {
     gap: spacing.md,
+  },
+  helperText: {
+    color: colors.textMuted,
+    marginTop: spacing.md,
+    lineHeight: 20,
+    textAlign: 'center',
   },
   linkRow: {
     flexDirection: 'row',
