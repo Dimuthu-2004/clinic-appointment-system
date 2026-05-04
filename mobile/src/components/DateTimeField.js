@@ -14,7 +14,9 @@ export default function DateTimeField({
   disabled = false,
 }) {
   const [showPicker, setShowPicker] = useState(false);
+  const [androidPickerMode, setAndroidPickerMode] = useState(mode === 'datetime' ? 'date' : mode);
   const { colors, isDark } = useTheme();
+  const isAndroidDateTimeMode = Platform.OS === 'android' && mode === 'datetime';
 
   const currentDate =
     mode === 'date' && value
@@ -23,7 +25,39 @@ export default function DateTimeField({
         ? new Date(value)
         : new Date();
 
-  const handleChange = (_event, selectedDate) => {
+  const handleAndroidDateTimeChange = (event, selectedDate) => {
+    if (event?.type === 'dismissed') {
+      setShowPicker(false);
+      setAndroidPickerMode('date');
+      return;
+    }
+
+    if (!selectedDate) {
+      return;
+    }
+
+    if (androidPickerMode === 'date') {
+      const nextDate = new Date(currentDate);
+      nextDate.setFullYear(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
+      nextDate.setSeconds(0, 0);
+      onChange(nextDate.toISOString());
+      setAndroidPickerMode('time');
+      return;
+    }
+
+    const nextDate = new Date(currentDate);
+    nextDate.setHours(selectedDate.getHours(), selectedDate.getMinutes(), 0, 0);
+    onChange(nextDate.toISOString());
+    setShowPicker(false);
+    setAndroidPickerMode('date');
+  };
+
+  const handleChange = (event, selectedDate) => {
+    if (isAndroidDateTimeMode) {
+      handleAndroidDateTimeChange(event, selectedDate);
+      return;
+    }
+
     if (Platform.OS !== 'ios') {
       setShowPicker(false);
     }
@@ -32,6 +66,8 @@ export default function DateTimeField({
       onChange(mode === 'date' ? toDateKey(selectedDate) : selectedDate.toISOString());
     }
   };
+
+  const pickerMode = isAndroidDateTimeMode ? androidPickerMode : mode;
 
   return (
     <View style={styles.wrapper}>
@@ -43,13 +79,16 @@ export default function DateTimeField({
           { backgroundColor: colors.surface, borderColor: colors.border },
           disabled && styles.disabled,
         ]}
-        onPress={() => setShowPicker(true)}
+        onPress={() => {
+          setAndroidPickerMode(mode === 'datetime' ? 'date' : mode);
+          setShowPicker(true);
+        }}
       >
         <Text style={[styles.value, { color: colors.text }]}>{mode === 'date' ? formatDateOnly(value) : formatDateTime(value)}</Text>
       </Pressable>
       {showPicker && !disabled ? (
         <DateTimePicker
-          mode={mode}
+          mode={pickerMode}
           value={currentDate}
           onChange={handleChange}
           minimumDate={allowPastDates ? undefined : minimumDate || new Date()}
