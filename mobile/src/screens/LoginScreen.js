@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
-import * as AuthSession from 'expo-auth-session';
 import * as Google from 'expo-auth-session/providers/google';
 import * as WebBrowser from 'expo-web-browser';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -33,7 +32,6 @@ function GoogleSignInButton({ disabled, googleClientIds, onError, onSuccess }) {
   const [submitting, setSubmitting] = useState(false);
   const [googleRequest, googleResponse, promptGoogleAsync] = Google.useAuthRequest({
     ...googleClientIds,
-    responseType: AuthSession.ResponseType.IdToken,
     scopes: ['openid', 'profile', 'email'],
     selectAccount: true,
   });
