@@ -213,8 +213,49 @@ const getResolvedTargetPatients = async ({
   return matchedPatients.filter((patient) => selectedSet.has(String(patient._id)));
 };
 
+const getUniquePatients = (patients = []) =>
+  [...new Map(patients.map((patient) => [String(patient._id || patient), patient])).values()];
+
+const queueAlertEmails = ({ alert, patients = [] }) => {
+  if (!alert.sendEmailNotifications) {
+    return;
+  }
+
+  const uniquePatients = getUniquePatients(patients);
+
+  if (!uniquePatients.length) {
+    return;
+  }
+
+  // Keep email delivery off the request path so SMTP delays do not cause the
+  // client to report a failed save after the alert record was already created.
+  void (async () => {
+    await Promise.all(
+      uniquePatients.map(async (patient) => {
+        const destinationEmail = String(patient.recoveryEmail || patient.email || '').trim().toLowerCase();
+        if (!destinationEmail) {
+          return;
+        }
+
+        try {
+          await sendClinicAlertEmail({
+            to: destinationEmail,
+            firstName: patient.firstName,
+            title: alert.title,
+            message: alert.message,
+          });
+        } catch (error) {
+          console.warn(`[alert] Email delivery failed for ${destinationEmail}: ${error.message}`);
+        }
+      })
+    );
+  })().catch((error) => {
+    console.warn(`[alert] Background email delivery failed for alert ${alert._id}: ${error.message}`);
+  });
+};
+
 const deliverAlertNotifications = async ({ alert, patients = [] }) => {
-  const uniquePatients = [...new Map(patients.map((patient) => [String(patient._id || patient), patient])).values()];
+  const uniquePatients = getUniquePatients(patients);
 
   if (alert.sendEmailNotifications && !isEmailServiceConfigured()) {
     throw new ApiError(503, 'Email service is not configured for alert emails. Add SMTP settings first.');
@@ -240,26 +281,13 @@ const deliverAlertNotifications = async ({ alert, patients = [] }) => {
           sendToAll: alert.sendToAll,
         },
       });
-
-      if (alert.sendEmailNotifications) {
-        const destinationEmail = String(patient.recoveryEmail || patient.email || '').trim().toLowerCase();
-        if (!destinationEmail) {
-          return;
-        }
-
-        try {
-          await sendClinicAlertEmail({
-            to: destinationEmail,
-            firstName: patient.firstName,
-            title: alert.title,
-            message: alert.message,
-          });
-        } catch (error) {
-          console.warn(`[alert] Email delivery failed for ${destinationEmail}: ${error.message}`);
-        }
-      }
     })
   );
+
+  queueAlertEmails({
+    alert,
+    patients: uniquePatients,
+  });
 };
 
 const previewAlertTargets = asyncHandler(async (req, res) => {
