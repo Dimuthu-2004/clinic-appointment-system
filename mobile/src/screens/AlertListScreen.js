@@ -138,10 +138,12 @@ export default function AlertListScreen({ navigation }) {
                     `Age range: ${formatAgeRange(alertItem)}`,
                     `Condition filter: ${alertItem.sendToAll ? 'All users' : alertItem.targetCondition || 'All patients'}`,
                     `Delivery: ${alertItem.sendEmailNotifications ? 'In-app + email' : 'In-app only'}`,
+                    `Closes: ${alertItem.endsAt ? formatDateTime(alertItem.endsAt) : 'No closing time'}`,
                     `Created: ${formatDateTime(alertItem.createdAt)}`,
                   ]
                 : [
                     `Published: ${formatDateTime(alertItem.createdAt)}`,
+                    `Closes: ${alertItem.endsAt ? formatDateTime(alertItem.endsAt) : 'No closing time'}`,
                     `Targeting: ${alertItem.sendToAll ? 'All users' : `${formatAgeRange(alertItem)}${alertItem.targetCondition ? `, ${alertItem.targetCondition}` : ''}`}`,
                   ]
             }

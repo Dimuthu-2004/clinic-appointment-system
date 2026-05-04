@@ -55,6 +55,10 @@ const selectedPatientsItemValidation = body('selectedPatientIds.*')
 const createAlertValidation = [
   body('title').trim().notEmpty().withMessage('Title is required'),
   body('message').trim().notEmpty().withMessage('Message is required'),
+  body('expiresAt')
+    .optional({ values: 'falsy' })
+    .isISO8601()
+    .withMessage('Closing date and time must be valid'),
   body('sendToAll').optional().isBoolean().withMessage('Send to all users must be true or false'),
   body('sendEmailNotifications')
     .optional()
@@ -92,6 +96,10 @@ const updateAlertValidation = [
   ...alertIdValidation,
   body('title').optional().trim().notEmpty().withMessage('Title cannot be empty'),
   body('message').optional().trim().notEmpty().withMessage('Message cannot be empty'),
+  body('expiresAt')
+    .optional({ values: 'falsy' })
+    .isISO8601()
+    .withMessage('Closing date and time must be valid'),
   body('sendToAll').optional().isBoolean().withMessage('Send to all users must be true or false'),
   body('sendEmailNotifications')
     .optional()

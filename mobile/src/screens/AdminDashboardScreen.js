@@ -26,6 +26,42 @@ const getMonthLabel = (dateKey) => {
   return date.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
 };
 
+const calendarWeekdayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+const buildMonthCalendarCells = (dateKey, countMap) => {
+  const monthDate = new Date(`${dateKey}T00:00:00`);
+  const year = monthDate.getFullYear();
+  const monthIndex = monthDate.getMonth();
+  const firstDay = new Date(year, monthIndex, 1);
+  const lastDay = new Date(year, monthIndex + 1, 0);
+  const leadingEmptyCells = firstDay.getDay();
+  const cells = [];
+
+  for (let index = 0; index < leadingEmptyCells; index += 1) {
+    cells.push({ key: `empty-start-${index}`, isEmpty: true });
+  }
+
+  for (let day = 1; day <= lastDay.getDate(); day += 1) {
+    const cellDate = new Date(year, monthIndex, day);
+    const cellDateKey = toDateKey(cellDate);
+    const count = countMap.get(cellDateKey) || 0;
+    cells.push({
+      key: cellDateKey,
+      dateKey: cellDateKey,
+      day,
+      count,
+      dots: Math.min(count, 3),
+      isEmpty: false,
+    });
+  }
+
+  while (cells.length % 7 !== 0) {
+    cells.push({ key: `empty-end-${cells.length}`, isEmpty: true });
+  }
+
+  return cells;
+};
+
 export default function AdminDashboardScreen({ navigation }) {
   const { user } = useAuth();
   const { colors: themeColors, isDark } = useTheme();
@@ -71,6 +107,7 @@ export default function AdminDashboardScreen({ navigation }) {
         const patients = users.filter((item) => item.role === 'patient').length;
         const doctorUsers = users.filter((item) => item.role === 'doctor');
         const staff = users.filter((item) => ['finance_manager', 'pharmacist'].includes(item.role)).length;
+        const now = Date.now();
 
         setOverview({
           totalUsers: users.length,
@@ -79,7 +116,18 @@ export default function AdminDashboardScreen({ navigation }) {
           staff,
           appointments: appointmentsResponse.data.count || 0,
           billings: billingsResponse.data.count || 0,
-          activeAlerts: alerts.filter((item) => item.status === 'active').length,
+          activeAlerts: alerts.filter((item) => {
+            if (item.status !== 'active') {
+              return false;
+            }
+
+            if (!item.endsAt) {
+              return true;
+            }
+
+            const endsAt = new Date(item.endsAt).getTime();
+            return !Number.isFinite(endsAt) || endsAt > now;
+          }).length,
         });
 
         const recentAccounts = [...users].sort((left, right) => {
@@ -172,6 +220,27 @@ export default function AdminDashboardScreen({ navigation }) {
       .sort((left, right) => left[0].localeCompare(right[0]))
       .map(([dateKey, count]) => ({ dateKey, count }));
   }, [appointments, indicatorMonth]);
+
+  const appointmentCountMap = useMemo(() => {
+    const counts = new Map();
+
+    appointments.forEach((appointment) => {
+      const dateKey = toDateKey(appointment?.appointmentDate);
+
+      if (!dateKey) {
+        return;
+      }
+
+      counts.set(dateKey, (counts.get(dateKey) || 0) + 1);
+    });
+
+    return counts;
+  }, [appointments]);
+
+  const calendarCells = useMemo(
+    () => buildMonthCalendarCells(indicatorMonth, appointmentCountMap),
+    [appointmentCountMap, indicatorMonth]
+  );
 
   const filteredAlerts = useMemo(
     () =>
@@ -363,47 +432,73 @@ export default function AdminDashboardScreen({ navigation }) {
           </View>
         </View>
         {indicatorDates.length ? (
-          <View style={styles.indicatorRow}>
-            {indicatorDates.map((item) => {
-              const isSelected = item.dateKey === selectedDate;
-
-              return (
-                <Pressable
-                  key={item.dateKey}
-                  onPress={() => setSelectedDate(item.dateKey)}
-                  style={[
-                    styles.indicatorPill,
-                    {
-                      backgroundColor: isSelected
-                        ? themeColors.primaryDark
-                        : isDark
-                          ? themeColors.surfaceMuted
-                          : '#F8FBFC',
-                      borderColor: isSelected ? themeColors.primaryDark : themeColors.border,
-                    },
-                  ]}
-                >
-                  <View
+          <>
+            <View style={styles.calendarWeekHeader}>
+              {calendarWeekdayLabels.map((label) => (
+                <Text key={label} style={[styles.calendarWeekLabel, { color: themeColors.textMuted }]}>
+                  {label}
+                </Text>
+              ))}
+            </View>
+            <View style={styles.calendarGrid}>
+              {calendarCells.map((cell) =>
+                cell.isEmpty ? (
+                  <View key={cell.key} style={styles.calendarCellEmpty} />
+                ) : (
+                  <Pressable
+                    key={cell.key}
+                    onPress={() => setSelectedDate(cell.dateKey)}
                     style={[
-                      styles.indicatorDot,
-                      { backgroundColor: isSelected ? '#FCD34D' : themeColors.secondary },
-                    ]}
-                  />
-                  <Text style={[styles.indicatorDate, { color: isSelected ? colors.surface : themeColors.text }]}>
-                    {new Date(`${item.dateKey}T00:00:00`).getDate()}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.indicatorCount,
-                      { color: isSelected ? colors.surface : themeColors.textMuted },
+                      styles.calendarCell,
+                      {
+                        backgroundColor:
+                          cell.dateKey === selectedDate
+                            ? themeColors.primaryDark
+                            : isDark
+                              ? themeColors.surfaceMuted
+                              : '#F8FBFC',
+                        borderColor:
+                          cell.dateKey === selectedDate ? themeColors.primaryDark : themeColors.border,
+                      },
                     ]}
                   >
-                    {item.count}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
+                    <Text
+                      style={[
+                        styles.calendarCellDay,
+                        { color: cell.dateKey === selectedDate ? colors.surface : themeColors.text },
+                      ]}
+                    >
+                      {cell.day}
+                    </Text>
+                    <View style={styles.calendarDotsRow}>
+                      {Array.from({ length: cell.dots }).map((_, index) => (
+                        <View
+                          key={`${cell.key}-dot-${index}`}
+                          style={[
+                            styles.calendarDot,
+                            {
+                              backgroundColor:
+                                cell.dateKey === selectedDate ? '#FCD34D' : themeColors.secondary,
+                            },
+                          ]}
+                        />
+                      ))}
+                    </View>
+                    <Text
+                      style={[
+                        styles.calendarCount,
+                        {
+                          color: cell.dateKey === selectedDate ? colors.surface : themeColors.textMuted,
+                        },
+                      ]}
+                    >
+                      {cell.count ? `${cell.count} booked` : 'No bookings'}
+                    </Text>
+                  </Pressable>
+                )
+              )}
+            </View>
+          </>
         ) : (
           <Text style={[styles.emptyAppointments, { color: themeColors.textMuted }]}>
             No appointments were found for this month.
@@ -435,16 +530,23 @@ export default function AdminDashboardScreen({ navigation }) {
             >
               <View style={styles.appointmentRowHeader}>
                 <View>
-                  <Text style={[styles.appointmentTitle, { color: themeColors.text }]}>Token {appointment.tokenNumber || '-'}</Text>
-                  <Text style={[styles.appointmentMeta, { color: themeColors.textMuted }]}>{formatDateTime(appointment.appointmentDate)}</Text>
+                  <Text style={[styles.appointmentTitle, { color: themeColors.text }]}>
+                    Patient: {appointment.patient?.firstName} {appointment.patient?.lastName}
+                  </Text>
+                  <Text style={[styles.appointmentSubtitleStrong, { color: themeColors.primaryDark }]}>
+                    Doctor: Dr {appointment.doctor?.firstName} {appointment.doctor?.lastName}
+                  </Text>
+                  <Text style={[styles.appointmentMeta, { color: themeColors.textMuted }]}>
+                    {formatDateTime(appointment.appointmentDate)}
+                  </Text>
                 </View>
                 <StatusBadge value={appointment.status} />
               </View>
               <Text style={[styles.appointmentMeta, { color: themeColors.textMuted }]}>
-                Patient: {appointment.patient?.firstName} {appointment.patient?.lastName}
+                Token: {appointment.tokenNumber || '-'}
               </Text>
               <Text style={[styles.appointmentMeta, { color: themeColors.textMuted }]}>
-                Doctor: Dr {appointment.doctor?.firstName} {appointment.doctor?.lastName}
+                Reason: {appointment.reason || 'Clinic appointment'}
               </Text>
               <Text style={[styles.appointmentMeta, { color: themeColors.textMuted }]}>Session: {appointment.appointmentSession || 'Not set'}</Text>
               <Text style={[styles.openHint, { color: themeColors.primaryDark }]}>Tap to view appointment details</Text>
@@ -497,6 +599,9 @@ export default function AdminDashboardScreen({ navigation }) {
                 </Text>
                 <Text style={[styles.userMeta, { color: themeColors.textMuted }]}>
                   Recipients: {alertItem.notificationsSentCount || alertItem.targetedPatients?.length || 0} | Delivery: {alertItem.sendEmailNotifications ? 'In-app + email' : 'In-app only'}
+                </Text>
+                <Text style={[styles.userMeta, { color: themeColors.textMuted }]}>
+                  Closes: {alertItem.endsAt ? formatDateTime(alertItem.endsAt) : 'No closing time'}
                 </Text>
               </View>
               <StatusBadge value={alertItem.status} />
@@ -670,31 +775,54 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.sm,
   },
-  indicatorRow: {
+  calendarWeekHeader: {
+    flexDirection: 'row',
+    marginBottom: spacing.xs,
+  },
+  calendarWeekLabel: {
+    flex: 1,
+    textAlign: 'center',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  calendarGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: spacing.xs,
     marginBottom: spacing.md,
   },
-  indicatorPill: {
-    minWidth: 64,
+  calendarCell: {
+    width: '14.2857%',
+    minHeight: 86,
     borderRadius: radii.md,
     borderWidth: 1,
-    paddingHorizontal: spacing.sm,
+    paddingHorizontal: spacing.xs,
     paddingVertical: spacing.xs,
+    marginBottom: spacing.xs,
   },
-  indicatorDot: {
+  calendarCellEmpty: {
+    width: '14.2857%',
+  },
+  calendarCellDay: {
+    fontSize: 17,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  calendarDotsRow: {
+    minHeight: 10,
+    marginTop: spacing.xs,
+    marginBottom: spacing.xs,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  calendarDot: {
     width: 8,
     height: 8,
     borderRadius: 999,
-    marginBottom: spacing.xs,
   },
-  indicatorDate: {
-    fontSize: 18,
-    fontWeight: '800',
-  },
-  indicatorCount: {
+  calendarCount: {
     fontSize: 11,
+    textAlign: 'center',
   },
   appointmentRow: {
     backgroundColor: '#F8FBFC',
@@ -715,6 +843,11 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 17,
     fontWeight: '800',
+  },
+  appointmentSubtitleStrong: {
+    color: colors.primaryDark,
+    fontWeight: '800',
+    marginTop: 2,
   },
   appointmentMeta: {
     color: colors.textMuted,

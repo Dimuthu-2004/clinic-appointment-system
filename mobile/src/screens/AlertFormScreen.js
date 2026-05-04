@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import api, { extractErrorMessage } from '../api/client';
 import AppButton from '../components/AppButton';
 import AppInput from '../components/AppInput';
+import DateTimeField from '../components/DateTimeField';
 import EmptyState from '../components/EmptyState';
 import ScreenContainer from '../components/ScreenContainer';
 import { useAuth } from '../hooks/useAuth';
@@ -48,6 +49,7 @@ export default function AlertFormScreen({ navigation, route }) {
     title: existingAlert?.title || '',
     message: existingAlert?.message || '',
     targetCondition: existingAlert?.targetCondition || '',
+    expiresAt: existingAlert?.endsAt || '',
     sendToAll: Boolean(existingSendToAll),
     sendEmailNotifications: Boolean(existingAlert?.sendEmailNotifications),
   });
@@ -180,6 +182,7 @@ export default function AlertFormScreen({ navigation, route }) {
         minAge: '',
         maxAge: '',
         targetCondition: form.sendToAll ? '' : form.targetCondition.trim(),
+        expiresAt: form.expiresAt || '',
         sendToAll: form.sendToAll,
         sendEmailNotifications: form.sendEmailNotifications,
         selectedPatientIds: form.sendToAll ? [] : selectedPatientIds,
@@ -240,6 +243,9 @@ export default function AlertFormScreen({ navigation, route }) {
                 Email delivery: {form.sendEmailNotifications ? 'Enabled' : 'In-app only'}
               </Text>
               <Text style={[styles.readonlyText, { color: themeColors.text }]}>
+                Closes: {form.expiresAt ? formatDateTime(form.expiresAt) : 'No closing time'}
+              </Text>
+              <Text style={[styles.readonlyText, { color: themeColors.text }]}>
                 Sent: {formatDateTime(existingAlert?.createdAt)}
               </Text>
             </>
@@ -290,6 +296,38 @@ export default function AlertFormScreen({ navigation, route }) {
                 }
                 themeColors={themeColors}
                 title="Send email notifications too"
+              />
+
+              <View
+                style={[
+                  styles.toggleCard,
+                  {
+                    backgroundColor: themeColors.surface,
+                    borderColor: themeColors.border,
+                  },
+                ]}
+              >
+                <View style={styles.toggleContent}>
+                  <Text style={[styles.toggleTitle, { color: themeColors.text }]}>
+                    Closing date and time (optional)
+                  </Text>
+                  <Text style={[styles.toggleHint, { color: themeColors.textMuted }]}>
+                    If you set this, patients can see the alert only from the published time until the closing time.
+                  </Text>
+                </View>
+                {form.expiresAt ? (
+                  <Pressable onPress={() => setForm((current) => ({ ...current, expiresAt: '' }))}>
+                    <Text style={styles.link}>Clear</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+
+              <DateTimeField
+                disabled={!canEdit}
+                label="Alert closing date and time"
+                minimumDate={new Date()}
+                onChange={(expiresAt) => setForm((current) => ({ ...current, expiresAt }))}
+                value={form.expiresAt}
               />
 
               <AppInput

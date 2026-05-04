@@ -57,6 +57,10 @@ const alertSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
+    endsAt: {
+      type: Date,
+      default: null,
+    },
     status: {
       type: String,
       enum: ['active', 'archived'],

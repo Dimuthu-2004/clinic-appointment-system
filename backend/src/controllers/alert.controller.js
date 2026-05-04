@@ -72,6 +72,18 @@ const resolveAgeRange = ({ minAge, maxAge, ageLimit }) => {
 const normalizeSendToAll = (value) => value === true || value === 'true';
 const normalizeSelectedPatientIds = (value) =>
   Array.isArray(value) ? [...new Set(value.map((item) => String(item || '').trim()).filter(Boolean))] : [];
+const normalizeOptionalEndsAt = (value) => {
+  if (value === '' || value === null || value === undefined) {
+    return null;
+  }
+
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+const isAlertVisibleToPatients = (alert) => {
+  const endsAt = alert?.endsAt ? new Date(alert.endsAt).getTime() : null;
+  return !Number.isFinite(endsAt) || endsAt > Date.now();
+};
 
 const hasTargetingFilters = ({ minAge, maxAge, ageLimit, targetCondition, sendToAll = false }) => {
   if (normalizeSendToAll(sendToAll)) {
@@ -323,6 +335,15 @@ const createAlert = asyncHandler(async (req, res) => {
     maxAge: sendToAll ? null : req.body.maxAge,
     ageLimit: sendToAll ? null : req.body.ageLimit,
   });
+  const endsAt = normalizeOptionalEndsAt(req.body.expiresAt);
+
+  if (req.body.expiresAt !== undefined && !endsAt) {
+    throw new ApiError(422, 'Closing date and time must be valid');
+  }
+
+  if (endsAt && endsAt.getTime() <= Date.now()) {
+    throw new ApiError(422, 'Closing date and time must be in the future');
+  }
 
   const alert = await Alert.create({
     title: String(req.body.title || '').trim(),
@@ -331,6 +352,7 @@ const createAlert = asyncHandler(async (req, res) => {
     maxAge: resolvedAgeRange.maxAge,
     ageLimit: null,
     targetCondition: sendToAll ? '' : String(req.body.targetCondition || '').trim(),
+    endsAt,
     sendToAll,
     sendEmailNotifications: normalizeSendToAll(req.body.sendEmailNotifications),
     status: req.body.status || 'active',
@@ -369,7 +391,11 @@ const getAlerts = asyncHandler(async (req, res) => {
         ? {}
         : { _id: null };
 
-  const alerts = await Alert.find(filter).populate(populateAlert).sort({ createdAt: -1 });
+  let alerts = await Alert.find(filter).populate(populateAlert).sort({ createdAt: -1 });
+
+  if (req.user.role === 'patient') {
+    alerts = alerts.filter(isAlertVisibleToPatients);
+  }
 
   res.status(200).json({
     success: true,
@@ -390,6 +416,10 @@ const getAlertById = asyncHandler(async (req, res) => {
     !alert.targetedPatients?.some((patient) => String(patient?._id || patient) === String(req.user._id))
   ) {
     throw new ApiError(403, 'You do not have access to this alert');
+  }
+
+  if (req.user.role === 'patient' && !isAlertVisibleToPatients(alert)) {
+    throw new ApiError(404, 'Alert not found');
   }
 
   res.status(200).json({
@@ -432,6 +462,20 @@ const updateAlert = asyncHandler(async (req, res) => {
 
   if (req.body.sendEmailNotifications !== undefined) {
     alert.sendEmailNotifications = normalizeSendToAll(req.body.sendEmailNotifications);
+  }
+
+  if (req.body.expiresAt !== undefined) {
+    const endsAt = normalizeOptionalEndsAt(req.body.expiresAt);
+
+    if (req.body.expiresAt && !endsAt) {
+      throw new ApiError(422, 'Closing date and time must be valid');
+    }
+
+    if (endsAt && endsAt.getTime() <= Date.now()) {
+      throw new ApiError(422, 'Closing date and time must be in the future');
+    }
+
+    alert.endsAt = endsAt;
   }
 
   if (targetingChanged) {
