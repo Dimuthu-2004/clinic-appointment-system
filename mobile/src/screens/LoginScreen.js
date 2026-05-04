@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
+import * as AuthSession from 'expo-auth-session';
 import * as Google from 'expo-auth-session/providers/google';
 import * as WebBrowser from 'expo-web-browser';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -15,6 +16,10 @@ WebBrowser.maybeCompleteAuthSession();
 const isRunningInExpoGo = () =>
   Constants.executionEnvironment === ExecutionEnvironment.StoreClient ||
   Constants.appOwnership === 'expo';
+const googleRedirectUri = AuthSession.makeRedirectUri({
+  scheme: 'clinicappointment',
+  path: 'oauthredirect',
+});
 
 const getGoogleConfigError = () => {
   if (Platform.OS === 'android') {
@@ -32,6 +37,7 @@ function GoogleSignInButton({ disabled, googleClientIds, onError, onSuccess }) {
   const [submitting, setSubmitting] = useState(false);
   const [googleRequest, googleResponse, promptGoogleAsync] = Google.useAuthRequest({
     ...googleClientIds,
+    redirectUri: googleRedirectUri,
     scopes: ['openid', 'profile', 'email'],
     selectAccount: true,
   });
@@ -114,7 +120,9 @@ function GoogleSignInButton({ disabled, googleClientIds, onError, onSuccess }) {
     try {
       onError('');
       setSubmitting(true);
-      const result = await promptGoogleAsync();
+      const result = await promptGoogleAsync({
+        showInRecents: false,
+      });
 
       if (result.type === 'cancel' || result.type === 'dismiss') {
         setSubmitting(false);
@@ -231,11 +239,6 @@ export default function LoginScreen({ navigation }) {
           />
           <AppButton title="Back to home" variant="secondary" onPress={() => navigation.navigate('Landing')} />
         </View>
-
-        <Text style={[styles.helperText, { color: themeColors.textMuted }]}>
-          Google sign-in creates a patient account the first time and lets the patient update the rest of the profile later.
-        </Text>
-
         <Pressable
           onPress={() => navigation.navigate('Register', { registrationType: 'patient' })}
           style={styles.linkRow}
@@ -290,12 +293,6 @@ const styles = StyleSheet.create({
   },
   actions: {
     gap: spacing.md,
-  },
-  helperText: {
-    color: colors.textMuted,
-    marginTop: spacing.md,
-    lineHeight: 20,
-    textAlign: 'center',
   },
   linkRow: {
     flexDirection: 'row',
