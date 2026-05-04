@@ -3,6 +3,7 @@ import { Alert, Image, StyleSheet, Text, View } from 'react-native';
 import { useIsFocused } from '@react-navigation/native';
 import api, { getFileBaseUrl } from '../api/client';
 import AppButton from '../components/AppButton';
+import AppInput from '../components/AppInput';
 import EmptyState from '../components/EmptyState';
 import EntityCard from '../components/EntityCard';
 import LoadingOverlay from '../components/LoadingOverlay';
@@ -22,12 +23,32 @@ const getDrugStatus = (drug) => {
   return 'active';
 };
 
+const matchesDrugSearch = (drug, query) => {
+  const normalizedQuery = String(query || '').trim().toLowerCase();
+
+  if (!normalizedQuery) {
+    return true;
+  }
+
+  return [
+    drug.name,
+    drug.genericName,
+    drug.category,
+    drug.dosageForm,
+    drug.strength,
+    drug.manufacturer,
+    drug.batchNumber,
+    drug.description,
+  ].some((value) => String(value || '').toLowerCase().includes(normalizedQuery));
+};
+
 export default function DrugInventoryListScreen({ navigation }) {
   const { user } = useAuth();
   const { colors: themeColors } = useTheme();
   const isFocused = useIsFocused();
   const [drugs, setDrugs] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
 
   useEffect(() => {
     const loadDrugs = async () => {
@@ -47,6 +68,8 @@ export default function DrugInventoryListScreen({ navigation }) {
     }
   }, [isFocused]);
 
+  const filteredDrugs = drugs.filter((drug) => matchesDrugSearch(drug, search));
+
   if (loading) {
     return <LoadingOverlay message="Loading drug inventory..." />;
   }
@@ -65,10 +88,19 @@ export default function DrugInventoryListScreen({ navigation }) {
         ) : null}
       </View>
 
+      <AppInput
+        label="Search inventory"
+        onChangeText={setSearch}
+        placeholder="Search name, generic, category, strength, or batch"
+        value={search}
+      />
+
       {drugs.length === 0 ? (
         <EmptyState message="No drug items are stored yet." title="No inventory items" />
+      ) : filteredDrugs.length === 0 ? (
+        <EmptyState message="No drug items matched your search." title="No search matches" />
       ) : (
-        drugs.map((drug) => (
+        filteredDrugs.map((drug) => (
           <EntityCard
             key={drug._id}
             footer={
