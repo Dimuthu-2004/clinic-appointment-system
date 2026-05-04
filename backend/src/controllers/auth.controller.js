@@ -14,6 +14,7 @@ const {
 } = require('../utils/validation');
 
 const googleAuthClient = new OAuth2Client();
+const GOOGLE_USERINFO_ENDPOINT = 'https://openidconnect.googleapis.com/v1/userinfo';
 
 const buildAuthResponse = (user) => {
   const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
@@ -193,6 +194,86 @@ const verifyGoogleIdToken = async (idToken) => {
   };
 };
 
+const fetchGoogleUserInfo = async (accessToken) => {
+  const response = await fetch(GOOGLE_USERINFO_ENDPOINT, {
+    headers: {
+      authorization: `Bearer ${accessToken}`,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error('Google user info request failed');
+  }
+
+  return response.json();
+};
+
+const verifyGoogleAccessToken = async (accessToken) => {
+  const audiences = parseConfiguredGoogleClientIds();
+
+  if (!audiences.length) {
+    throw new ApiError(
+      503,
+      'Google sign-in is not configured. Add GOOGLE_ANDROID_CLIENT_ID and the matching mobile env value first.'
+    );
+  }
+
+  let tokenInfo;
+
+  try {
+    tokenInfo = await googleAuthClient.getTokenInfo(accessToken);
+  } catch (_error) {
+    throw new ApiError(401, 'Google sign-in could not be verified');
+  }
+
+  if (!audiences.includes(String(tokenInfo?.aud || '').trim())) {
+    throw new ApiError(401, 'Google sign-in could not be verified');
+  }
+
+  const googleId = String(tokenInfo?.sub || tokenInfo?.user_id || '').trim();
+  const email = String(tokenInfo?.email || '')
+    .trim()
+    .toLowerCase();
+  const emailVerified =
+    tokenInfo?.email_verified === true || tokenInfo?.email_verified === 'true';
+
+  if (!googleId || !email || !emailVerified) {
+    throw new ApiError(401, 'Google sign-in did not return a verified email address');
+  }
+
+  let profile = null;
+
+  try {
+    profile = await fetchGoogleUserInfo(accessToken);
+  } catch (_error) {
+    profile = null;
+  }
+
+  return {
+    googleId,
+    email,
+    emailVerified,
+    name: String(profile?.name || '').trim(),
+    givenName: String(profile?.given_name || '').trim(),
+    familyName: String(profile?.family_name || '').trim(),
+  };
+};
+
+const resolveGoogleProfile = async ({ idToken, accessToken }) => {
+  const normalizedIdToken = String(idToken || '').trim();
+  const normalizedAccessToken = String(accessToken || '').trim();
+
+  if (normalizedIdToken) {
+    return verifyGoogleIdToken(normalizedIdToken);
+  }
+
+  if (normalizedAccessToken) {
+    return verifyGoogleAccessToken(normalizedAccessToken);
+  }
+
+  throw new ApiError(400, 'Google ID token or access token is required');
+};
+
 const registerPatient = asyncHandler(async (req, res) => {
   const user = await createUserAccount({
     ...req.body,
@@ -254,7 +335,10 @@ const login = asyncHandler(async (req, res) => {
 });
 
 const googleLogin = asyncHandler(async (req, res) => {
-  const googleProfile = await verifyGoogleIdToken(req.body.idToken);
+  const googleProfile = await resolveGoogleProfile({
+    idToken: req.body.idToken,
+    accessToken: req.body.accessToken,
+  });
 
   let user = await User.findOne({
     $or: [{ googleId: googleProfile.googleId }, { email: googleProfile.email }],

@@ -52,7 +52,23 @@ const loginValidation = [
 ];
 
 const googleLoginValidation = [
-  body('idToken').trim().notEmpty().withMessage('Google ID token is required'),
+  body('idToken')
+    .optional({ values: 'falsy' })
+    .trim()
+    .isString()
+    .withMessage('Google ID token must be a string'),
+  body('accessToken')
+    .optional({ values: 'falsy' })
+    .trim()
+    .isString()
+    .withMessage('Google access token must be a string'),
+  body().custom((value) => {
+    if (String(value?.idToken || '').trim() || String(value?.accessToken || '').trim()) {
+      return true;
+    }
+
+    throw new Error('Google ID token or access token is required');
+  }),
 ];
 
 const requestPasswordResetValidation = [body('email').isEmail().withMessage('A valid email is required')];

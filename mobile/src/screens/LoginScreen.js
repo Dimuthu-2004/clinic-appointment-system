@@ -64,18 +64,20 @@ function GoogleSignInButton({ disabled, googleClientIds, onError, onSuccess }) {
       }
 
       const idToken = googleResponse.params?.id_token || googleResponse.authentication?.idToken;
+      const accessToken =
+        googleResponse.params?.access_token || googleResponse.authentication?.accessToken;
 
-      if (!idToken) {
+      if (!idToken && !accessToken) {
         if (isActive) {
           setSubmitting(false);
-          onError('Google sign-in did not return an ID token.');
+          onError('Google sign-in did not return a usable token.');
         }
         return;
       }
 
       try {
         onError('');
-        await onSuccess(idToken);
+        await onSuccess({ idToken, accessToken });
       } catch (submitError) {
         if (isActive) {
           onError(

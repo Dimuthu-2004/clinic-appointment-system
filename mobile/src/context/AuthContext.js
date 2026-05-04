@@ -158,9 +158,10 @@ export function AuthProvider({ children }) {
     await persistSession(response.data.data);
   };
 
-  const signInWithGoogle = async (idToken) => {
+  const signInWithGoogle = async ({ idToken, accessToken }) => {
     const response = await api.post('/auth/google', {
-      idToken,
+      ...(idToken ? { idToken } : {}),
+      ...(accessToken ? { accessToken } : {}),
     });
     await persistSession(response.data.data);
   };
